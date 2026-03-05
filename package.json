@@ -1,0 +1,45 @@
+{
+  "name": "cyril59310-launcher",
+  "version": "1.0.0",
+  "description": "Launcher Minecraft proposé par Cyril59310",
+  "main": "src/main.js",
+  "scripts": {
+    "start": "electron .",
+    "build": "electron-builder --win nsis --config.win.signAndEditExecutable=false",
+    "build:portable": "electron-builder --win portable --config.win.signAndEditExecutable=false"
+  },
+  "keywords": [
+    "minecraft",
+    "launcher",
+    "electron"
+  ],
+  "author": "Cyril59310",
+  "license": "MIT",
+  "dependencies": {
+    "minecraft-launcher-core": "^3.18.0",
+    "msmc": "^5.0.5"
+  },
+  "devDependencies": {
+    "electron": "^36.3.2",
+    "electron-builder": "^24.13.3"
+  },
+  "build": {
+    "appId": "fr.cyril.cyril59310-launcher",
+    "productName": "Cyril59310 Launcher",
+    "directories": {
+      "output": "build"
+    },
+    "files": [
+      "src/**/*",
+      "package.json"
+    ],
+    "win": {
+      "icon": "src/renderer/assets/logo.png",
+      "signAndEditExecutable": false,
+      "target": [
+        "nsis",
+        "portable"
+      ]
+    }
+  }
+}

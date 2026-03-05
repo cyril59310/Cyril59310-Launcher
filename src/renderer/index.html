@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Cyril59310 Launcher</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div class="bg-orb orb-1" aria-hidden="true"></div>
+  <div class="bg-orb orb-2" aria-hidden="true"></div>
+
+  <main class="card">
+    <header class="hero">
+      <img class="hero-icon" src="assets/logo.png" alt="Icône du launcher" />
+      <div>
+        <h1>Cyril59310 Launcher</h1>
+        <p class="subtitle">Launcher Minecraft (Java Edition) Microsoft.</p>
+      </div>
+    </header>
+
+    <section class="auth-card">
+      <div class="auth-line">
+        <strong>Compte Microsoft:</strong>
+        <span id="msStatus">Non connecté</span>
+      </div>
+      <label for="msAccountSelect">Compte actif</label>
+      <select id="msAccountSelect" aria-label="Compte Microsoft actif">
+        <option value="">Aucun compte</option>
+      </select>
+      <div class="auth-actions">
+        <button id="msLoginBtn" type="button">Ajouter un compte</button>
+        <button id="msLogoutBtn" type="button" class="secondary">Supprimer le compte actif</button>
+      </div>
+    </section>
+
+    <form id="launchForm">
+      <label for="version">Version</label>
+      <select id="version" name="version" required>
+        <option value="">Chargement des versions...</option>
+      </select>
+
+      <label for="memoryMb">RAM max</label>
+      <select id="memoryMb" name="memoryMb" required>
+        <option value="4096">4 Go</option>
+        <option value="8192">8 Go</option>
+        <option value="16384">16 Go</option>
+      </select>
+
+      <label class="checkbox-row" for="disableGameConsole">
+        <input id="disableGameConsole" name="disableGameConsole" type="checkbox" />
+        Désactiver la console Java au lancement
+      </label>
+
+      <label class="checkbox-row" for="closeLauncherOnStart">
+        <input id="closeLauncherOnStart" name="closeLauncherOnStart" type="checkbox" />
+        Fermer le launcher au lancement du jeu
+      </label>
+
+      <button id="launchBtn" type="submit">Lancer Minecraft</button>
+    </form>
+
+    <div class="status-wrapper">
+      <div id="status">Prêt.</div>
+      <div id="progress">Progression: 0%</div>
+    </div>
+    <div class="progress-bar" aria-hidden="true">
+      <div id="progressFill" class="progress-fill"></div>
+    </div>
+
+    <pre id="logs" aria-live="polite"></pre>
+  </main>
+
+  <script src="renderer.js"></script>
+</body>
+</html>
