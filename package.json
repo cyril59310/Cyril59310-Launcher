@@ -5,8 +5,8 @@
   "main": "src/main.js",
   "scripts": {
     "start": "electron .",
-    "build": "electron-builder --win nsis --config.win.signAndEditExecutable=false",
-    "build:portable": "electron-builder --win portable --config.win.signAndEditExecutable=false"
+    "build": "electron-builder --win nsis",
+    "build:portable": "electron-builder --win portable"
   },
   "keywords": [
     "minecraft",
@@ -34,8 +34,8 @@
       "package.json"
     ],
     "win": {
-      "icon": "src/renderer/assets/logo.png",
-      "signAndEditExecutable": false,
+      "executableName": "Cyril59310-launcher",
+      "icon": "src/renderer/assets/logo.ico",
       "target": [
         "nsis",
         "portable"

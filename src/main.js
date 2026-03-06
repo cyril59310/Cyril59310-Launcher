@@ -15,6 +15,10 @@ const launcherRoot = () => path.join(app.getPath('appData'), '.Cyril59310-Launch
 const authStorePath = () => path.join(launcherRoot(), 'auth.json');
 const VERSION_MANIFEST_URL = 'https://launchermeta.mojang.com/mc/game/version_manifest_v2.json';
 
+app.setName('Cyril59310-launcher');
+app.setAppUserModelId('fr.cyril.cyril59310-launcher');
+process.title = 'Cyril59310-launcher';
+
 function createDefaultAuthStore() {
   return {
     activeAccountId: null,
