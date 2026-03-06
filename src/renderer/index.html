@@ -4,6 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Cyril59310 Launcher</title>
+  <link rel="icon" type="image/png" href="assets/logo.png" />
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
@@ -40,6 +41,11 @@
         <option value="">Chargement des versions...</option>
       </select>
 
+      <label class="checkbox-row" for="includeSnapshots">
+        <input id="includeSnapshots" name="includeSnapshots" type="checkbox" />
+        Afficher les versions snapshot
+      </label>
+
       <label for="memoryMb">RAM max</label>
       <select id="memoryMb" name="memoryMb" required>
         <option value="4096">4 Go</option>
@@ -58,6 +64,7 @@
       </label>
 
       <button id="launchBtn" type="submit">Lancer Minecraft</button>
+      <button id="openGameFolderBtn" type="button" class="secondary">Ouvrir le dossier du jeu</button>
     </form>
 
     <div class="status-wrapper">

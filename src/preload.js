@@ -2,7 +2,8 @@ const { contextBridge, ipcRenderer } = require('electron');
 
 contextBridge.exposeInMainWorld('mcLauncher', {
   start: (payload) => ipcRenderer.invoke('launcher:start', payload),
-  getVersions: () => ipcRenderer.invoke('launcher:versions'),
+  getVersions: (options) => ipcRenderer.invoke('launcher:versions', options),
+  openGameFolder: () => ipcRenderer.invoke('launcher:open-game-folder'),
   microsoftLogin: () => ipcRenderer.invoke('auth:microsoft-login'),
   microsoftRestore: () => ipcRenderer.invoke('auth:microsoft-restore'),
   microsoftList: () => ipcRenderer.invoke('auth:microsoft-list'),

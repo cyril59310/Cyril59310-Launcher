@@ -1,7 +1,7 @@
 const path = require('path');
 const fs = require('fs');
 const https = require('https');
-const { app, BrowserWindow, ipcMain } = require('electron');
+const { app, BrowserWindow, ipcMain, shell } = require('electron');
 const { Client } = require('minecraft-launcher-core');
 const { Auth } = require('msmc');
 
@@ -14,6 +14,10 @@ let microsoftAccountId = null;
 const launcherRoot = () => path.join(app.getPath('appData'), '.Cyril59310-Launcher');
 const authStorePath = () => path.join(launcherRoot(), 'auth.json');
 const VERSION_MANIFEST_URL = 'https://launchermeta.mojang.com/mc/game/version_manifest_v2.json';
+
+app.setName('Cyril59310-launcher');
+app.setAppUserModelId('fr.cyril.cyril59310-launcher');
+process.title = 'Cyril59310-launcher';
 
 function createDefaultAuthStore() {
   return {
@@ -236,6 +240,7 @@ function createWindow() {
     height: 920,
     resizable: false,
     autoHideMenuBar: true,
+    icon: path.join(__dirname, 'renderer', 'assets', 'logo.png'),
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
@@ -267,7 +272,14 @@ ipcMain.handle('launcher:start', async (_, payload) => {
     return { ok: false, message: 'Un lancement est déjà en cours.' };
   }
 
-  const { version, memoryMb, disableGameConsole, closeLauncherOnStart, accountId } = payload;
+  const {
+    version,
+    versionType,
+    memoryMb,
+    disableGameConsole,
+    closeLauncherOnStart,
+    accountId
+  } = payload;
 
   if (!version) {
     return { ok: false, message: 'La version est requise.' };
@@ -282,6 +294,10 @@ ipcMain.handle('launcher:start', async (_, payload) => {
   const maxMemoryMb = Number.isFinite(safeMemoryMb) && safeMemoryMb >= 1024 ? safeMemoryMb : 2048;
   const hideConsole = Boolean(disableGameConsole);
   const shouldCloseLauncher = Boolean(closeLauncherOnStart);
+  const allowedVersionTypes = new Set(['release', 'snapshot', 'old_alpha', 'old_beta']);
+  const resolvedVersionType = typeof versionType === 'string' && allowedVersionTypes.has(versionType)
+    ? versionType
+    : 'release';
 
   const launcher = new Client();
   const minecraftDirectory = launcherRoot();
@@ -292,7 +308,7 @@ ipcMain.handle('launcher:start', async (_, payload) => {
     javaPath: process.platform === 'win32' && hideConsole ? 'javaw' : 'java',
     version: {
       number: version.trim(),
-      type: 'release'
+      type: resolvedVersionType
     },
     memory: {
       max: `${maxMemoryMb}M`,
@@ -356,25 +372,65 @@ ipcMain.handle('launcher:start', async (_, payload) => {
   });
 });
 
-ipcMain.handle('launcher:versions', async () => {
+ipcMain.handle('launcher:versions', async (_, options) => {
+  const includeSnapshots = Boolean(options && options.includeSnapshots);
+
   try {
     const manifest = await fetchJson(VERSION_MANIFEST_URL);
-    const releases = Array.isArray(manifest.versions)
+    const allowedTypes = includeSnapshots
+      ? new Set(['release', 'snapshot'])
+      : new Set(['release']);
+    const versions = Array.isArray(manifest.versions)
       ? manifest.versions
-        .filter((entry) => entry && entry.type === 'release' && typeof entry.id === 'string')
-        .map((entry) => entry.id)
+        .filter((entry) => (
+          entry
+          && typeof entry.id === 'string'
+          && typeof entry.type === 'string'
+          && allowedTypes.has(entry.type)
+        ))
+        .map((entry) => ({
+          id: entry.id,
+          type: entry.type
+        }))
       : [];
+
+    const latestVersion = includeSnapshots
+      ? (manifest.latest && typeof manifest.latest.snapshot === 'string' ? manifest.latest.snapshot : null)
+      : (manifest.latest && typeof manifest.latest.release === 'string' ? manifest.latest.release : null);
 
     return {
       ok: true,
-      latest: manifest.latest && typeof manifest.latest.release === 'string'
-        ? manifest.latest.release
-        : null,
-      versions: releases
+      latest: latestVersion,
+      versions
     };
   } catch (error) {
     const message = error && error.message ? error.message : String(error);
     return { ok: false, message: `Impossible de récupérer les versions: ${message}`, latest: null, versions: [] };
+  }
+});
+
+ipcMain.handle('launcher:open-game-folder', async () => {
+  try {
+    ensureLauncherRoot();
+    const targetPath = launcherRoot();
+    const errorMessage = await shell.openPath(targetPath);
+
+    if (errorMessage) {
+      return {
+        ok: false,
+        message: `Impossible d'ouvrir le dossier: ${errorMessage}`,
+        path: targetPath
+      };
+    }
+
+    return {
+      ok: true,
+      message: 'Dossier ouvert.',
+      path: targetPath
+    };
+  } catch (error) {
+    const message = error && error.message ? error.message : String(error);
+    return { ok: false, message: `Erreur ouverture dossier: ${message}`, path: launcherRoot() };
   }
 });
 
