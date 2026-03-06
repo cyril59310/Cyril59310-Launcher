@@ -236,6 +236,7 @@ function createWindow() {
     height: 920,
     resizable: false,
     autoHideMenuBar: true,
+    icon: path.join(__dirname, 'renderer', 'assets', 'logo.png'),
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
