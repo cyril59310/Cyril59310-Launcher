@@ -1,7 +1,7 @@
 const path = require('path');
 const fs = require('fs');
 const https = require('https');
-const { app, BrowserWindow, ipcMain } = require('electron');
+const { app, BrowserWindow, ipcMain, shell } = require('electron');
 const { Client } = require('minecraft-launcher-core');
 const { Auth } = require('msmc');
 
@@ -406,6 +406,31 @@ ipcMain.handle('launcher:versions', async (_, options) => {
   } catch (error) {
     const message = error && error.message ? error.message : String(error);
     return { ok: false, message: `Impossible de récupérer les versions: ${message}`, latest: null, versions: [] };
+  }
+});
+
+ipcMain.handle('launcher:open-game-folder', async () => {
+  try {
+    ensureLauncherRoot();
+    const targetPath = launcherRoot();
+    const errorMessage = await shell.openPath(targetPath);
+
+    if (errorMessage) {
+      return {
+        ok: false,
+        message: `Impossible d'ouvrir le dossier: ${errorMessage}`,
+        path: targetPath
+      };
+    }
+
+    return {
+      ok: true,
+      message: 'Dossier ouvert.',
+      path: targetPath
+    };
+  } catch (error) {
+    const message = error && error.message ? error.message : String(error);
+    return { ok: false, message: `Erreur ouverture dossier: ${message}`, path: launcherRoot() };
   }
 });
 

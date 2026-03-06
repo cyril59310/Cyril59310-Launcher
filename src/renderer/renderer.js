@@ -1,5 +1,6 @@
 const launchForm = document.getElementById('launchForm');
 const launchBtn = document.getElementById('launchBtn');
+const openGameFolderBtn = document.getElementById('openGameFolderBtn');
 const logsEl = document.getElementById('logs');
 const statusEl = document.getElementById('status');
 const progressEl = document.getElementById('progress');
@@ -228,6 +229,27 @@ launchForm.addEventListener('submit', async (event) => {
     appendLog(`[error] ${message}`);
   } finally {
     launchBtn.disabled = false;
+  }
+});
+
+openGameFolderBtn.addEventListener('click', async () => {
+  openGameFolderBtn.disabled = true;
+
+  try {
+    const result = await window.mcLauncher.openGameFolder();
+    if (result.ok) {
+      statusEl.textContent = 'Dossier du jeu ouvert.';
+      appendLog(`[launcher] Dossier ouvert: ${result.path}`);
+    } else {
+      statusEl.textContent = result.message || 'Impossible d\'ouvrir le dossier du jeu.';
+      appendLog(`[launcher] ${result.message || 'Ouverture du dossier impossible.'}`);
+    }
+  } catch (error) {
+    const message = error && error.message ? error.message : String(error);
+    statusEl.textContent = `Erreur: ${message}`;
+    appendLog(`[error] ${message}`);
+  } finally {
+    openGameFolderBtn.disabled = false;
   }
 });
 
