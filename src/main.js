@@ -5,6 +5,7 @@ const { spawn } = require('child_process');
 const { app, BrowserWindow, ipcMain, shell } = require('electron');
 const { Client } = require('minecraft-launcher-core');
 const { Auth } = require('msmc');
+const keytar = require('keytar');
 
 let mainWindow;
 let isLaunching = false;
@@ -17,6 +18,7 @@ const authStorePath = () => path.join(launcherRoot(), 'auth.json');
 const runtimesRoot = () => path.join(launcherRoot(), 'runtime');
 const VERSION_MANIFEST_URL = 'https://launchermeta.mojang.com/mc/game/version_manifest_v2.json';
 const JAVA_API_BASE = 'https://api.adoptium.net/v3/binary/latest';
+const KEYTAR_SERVICE = 'Cyril59310-Launcher';
 
 app.setName('Cyril59310-launcher');
 app.setAppUserModelId('fr.cyril.cyril59310-launcher');
@@ -430,12 +432,12 @@ function readAuthStore() {
 
     if (Array.isArray(parsed.accounts)) {
       const accounts = parsed.accounts
-        .filter((account) => account && typeof account.refreshToken === 'string')
+        .filter((account) => account && (account.id || account.uuid || account.name))
         .map((account) => ({
-          id: String(account.id || account.uuid || `account-${Date.now()}`),
+          id: String(account.id || account.uuid || `account-${Date.now()}-${Math.random().toString(16).slice(2)}`),
           name: String(account.name || 'Compte Microsoft'),
           uuid: String(account.uuid || ''),
-          refreshToken: String(account.refreshToken)
+          legacyRefreshToken: typeof account.refreshToken === 'string' ? String(account.refreshToken) : null
         }));
 
       const activeAccountId = typeof parsed.activeAccountId === 'string'
@@ -452,7 +454,7 @@ function readAuthStore() {
           id: 'legacy',
           name: 'Compte Microsoft',
           uuid: '',
-          refreshToken: parsed.refreshToken
+          legacyRefreshToken: String(parsed.refreshToken)
         }]
       };
     }
@@ -465,7 +467,76 @@ function readAuthStore() {
 
 function writeAuthStore(store) {
   ensureLauncherRoot();
-  fs.writeFileSync(authStorePath(), JSON.stringify(store, null, 2), 'utf-8');
+  const normalizedStore = {
+    activeAccountId: typeof store.activeAccountId === 'string' ? store.activeAccountId : null,
+    accounts: Array.isArray(store.accounts)
+      ? store.accounts.map((account) => ({
+        id: String(account.id || ''),
+        name: String(account.name || 'Compte Microsoft'),
+        uuid: String(account.uuid || '')
+      })).filter((account) => account.id)
+      : []
+  };
+
+  fs.writeFileSync(authStorePath(), JSON.stringify(normalizedStore, null, 2), 'utf-8');
+}
+
+function keytarAccountKey(accountId) {
+  return `microsoft:${accountId}`;
+}
+
+async function readRefreshTokenSecure(accountId) {
+  if (!accountId) {
+    return null;
+  }
+
+  return keytar.getPassword(KEYTAR_SERVICE, keytarAccountKey(accountId));
+}
+
+async function writeRefreshTokenSecure(accountId, refreshToken) {
+  if (!accountId || typeof refreshToken !== 'string' || !refreshToken) {
+    return;
+  }
+
+  await keytar.setPassword(KEYTAR_SERVICE, keytarAccountKey(accountId), refreshToken);
+}
+
+async function deleteRefreshTokenSecure(accountId) {
+  if (!accountId) {
+    return;
+  }
+
+  await keytar.deletePassword(KEYTAR_SERVICE, keytarAccountKey(accountId));
+}
+
+async function migrateLegacyRefreshTokens(store) {
+  if (!store || !Array.isArray(store.accounts) || !store.accounts.length) {
+    return store;
+  }
+
+  let changed = false;
+
+  for (const account of store.accounts) {
+    if (!account || typeof account.id !== 'string') {
+      continue;
+    }
+
+    if (typeof account.legacyRefreshToken === 'string' && account.legacyRefreshToken) {
+      const existing = await readRefreshTokenSecure(account.id);
+      if (!existing) {
+        await writeRefreshTokenSecure(account.id, account.legacyRefreshToken);
+      }
+
+      delete account.legacyRefreshToken;
+      changed = true;
+    }
+  }
+
+  if (changed) {
+    writeAuthStore(store);
+  }
+
+  return store;
 }
 
 function publicAccounts(store) {
@@ -512,17 +583,22 @@ function resetMicrosoftSession() {
 }
 
 async function activateAccount(accountId) {
-  const store = readAuthStore();
+  const store = await migrateLegacyRefreshTokens(readAuthStore());
   const account = store.accounts.find((entry) => entry.id === accountId);
 
   if (!account) {
     throw new Error('Compte introuvable.');
   }
 
-  const refreshed = await refreshAccountFromToken(account.refreshToken);
+  const currentRefreshToken = await readRefreshTokenSecure(account.id);
+  if (!currentRefreshToken) {
+    throw new Error('Token Microsoft introuvable dans le coffre systeme. Reconnecte ton compte.');
+  }
+
+  const refreshed = await refreshAccountFromToken(currentRefreshToken);
   applyMicrosoftToken(account.id, refreshed.token);
 
-  account.refreshToken = refreshed.refreshToken;
+  await writeRefreshTokenSecure(account.id, refreshed.refreshToken);
   account.name = microsoftProfile.name;
   account.uuid = microsoftProfile.id;
   store.activeAccountId = account.id;
@@ -840,14 +916,15 @@ ipcMain.handle('auth:microsoft-login', async () => {
     const profileName = token.profile?.name || token.mclc().name || 'Compte Microsoft';
     const refreshToken = xboxManager.save();
 
-    const store = readAuthStore();
+    const store = await migrateLegacyRefreshTokens(readAuthStore());
     const existingIndex = store.accounts.findIndex((account) => account.id === profileId || account.uuid === profileId);
     const account = {
       id: profileId,
       uuid: profileId,
-      name: profileName,
-      refreshToken
+      name: profileName
     };
+
+    await writeRefreshTokenSecure(account.id, refreshToken);
 
     if (existingIndex >= 0) {
       store.accounts[existingIndex] = account;
@@ -868,7 +945,7 @@ ipcMain.handle('auth:microsoft-login', async () => {
 });
 
 ipcMain.handle('auth:microsoft-restore', async () => {
-  const store = readAuthStore();
+  const store = await migrateLegacyRefreshTokens(readAuthStore());
 
   if (!store.accounts.length) {
     resetMicrosoftSession();
@@ -888,7 +965,7 @@ ipcMain.handle('auth:microsoft-restore', async () => {
 });
 
 ipcMain.handle('auth:microsoft-list', async () => {
-  const store = readAuthStore();
+  const store = await migrateLegacyRefreshTokens(readAuthStore());
   return accountResponse(store, true, 'Liste des comptes.');
 });
 
@@ -908,7 +985,7 @@ ipcMain.handle('auth:microsoft-select', async (_, accountId) => {
 });
 
 ipcMain.handle('auth:microsoft-remove', async (_, accountId) => {
-  const store = readAuthStore();
+  const store = await migrateLegacyRefreshTokens(readAuthStore());
   const targetId = typeof accountId === 'string' && accountId ? accountId : store.activeAccountId;
 
   if (!targetId) {
@@ -924,6 +1001,7 @@ ipcMain.handle('auth:microsoft-remove', async (_, accountId) => {
 
   store.accounts = filtered;
   store.activeAccountId = filtered[0] ? filtered[0].id : null;
+  await deleteRefreshTokenSecure(targetId);
   writeAuthStore(store);
 
   if (microsoftAccountId === targetId) {
@@ -946,7 +1024,7 @@ ipcMain.handle('auth:microsoft-remove', async (_, accountId) => {
 });
 
 ipcMain.handle('auth:microsoft-logout', async () => {
-  const store = readAuthStore();
+  const store = await migrateLegacyRefreshTokens(readAuthStore());
   if (!store.activeAccountId) {
     return accountResponse(store, false, 'Aucun compte actif à supprimer.');
   }
@@ -955,6 +1033,7 @@ ipcMain.handle('auth:microsoft-logout', async () => {
   const filtered = store.accounts.filter((account) => account.id !== targetId);
   store.accounts = filtered;
   store.activeAccountId = filtered[0] ? filtered[0].id : null;
+  await deleteRefreshTokenSecure(targetId);
   writeAuthStore(store);
 
   if (microsoftAccountId === targetId) {

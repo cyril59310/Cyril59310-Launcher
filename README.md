@@ -60,7 +60,10 @@ Le launcher permet:
 
 Les informations de session sont stockees localement dans:
 
-- Windows: `%APPDATA%/.Cyril59310-Launcher/auth.json`
+- Windows: `%APPDATA%/.Cyril59310-Launcher/auth.json` (metadonnees de compte uniquement)
+
+Les refresh tokens Microsoft sont stockes de facon securisee via `keytar` dans le coffre systeme
+(Credential Manager Windows / Keychain macOS / Secret Service Linux).
 
 ## Donnees Minecraft
 
