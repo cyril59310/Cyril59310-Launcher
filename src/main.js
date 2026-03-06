@@ -267,7 +267,14 @@ ipcMain.handle('launcher:start', async (_, payload) => {
     return { ok: false, message: 'Un lancement est déjà en cours.' };
   }
 
-  const { version, memoryMb, disableGameConsole, closeLauncherOnStart, accountId } = payload;
+  const {
+    version,
+    versionType,
+    memoryMb,
+    disableGameConsole,
+    closeLauncherOnStart,
+    accountId
+  } = payload;
 
   if (!version) {
     return { ok: false, message: 'La version est requise.' };
@@ -282,6 +289,10 @@ ipcMain.handle('launcher:start', async (_, payload) => {
   const maxMemoryMb = Number.isFinite(safeMemoryMb) && safeMemoryMb >= 1024 ? safeMemoryMb : 2048;
   const hideConsole = Boolean(disableGameConsole);
   const shouldCloseLauncher = Boolean(closeLauncherOnStart);
+  const allowedVersionTypes = new Set(['release', 'snapshot', 'old_alpha', 'old_beta']);
+  const resolvedVersionType = typeof versionType === 'string' && allowedVersionTypes.has(versionType)
+    ? versionType
+    : 'release';
 
   const launcher = new Client();
   const minecraftDirectory = launcherRoot();
@@ -292,7 +303,7 @@ ipcMain.handle('launcher:start', async (_, payload) => {
     javaPath: process.platform === 'win32' && hideConsole ? 'javaw' : 'java',
     version: {
       number: version.trim(),
-      type: 'release'
+      type: resolvedVersionType
     },
     memory: {
       max: `${maxMemoryMb}M`,
@@ -356,21 +367,36 @@ ipcMain.handle('launcher:start', async (_, payload) => {
   });
 });
 
-ipcMain.handle('launcher:versions', async () => {
+ipcMain.handle('launcher:versions', async (_, options) => {
+  const includeSnapshots = Boolean(options && options.includeSnapshots);
+
   try {
     const manifest = await fetchJson(VERSION_MANIFEST_URL);
-    const releases = Array.isArray(manifest.versions)
+    const allowedTypes = includeSnapshots
+      ? new Set(['release', 'snapshot'])
+      : new Set(['release']);
+    const versions = Array.isArray(manifest.versions)
       ? manifest.versions
-        .filter((entry) => entry && entry.type === 'release' && typeof entry.id === 'string')
-        .map((entry) => entry.id)
+        .filter((entry) => (
+          entry
+          && typeof entry.id === 'string'
+          && typeof entry.type === 'string'
+          && allowedTypes.has(entry.type)
+        ))
+        .map((entry) => ({
+          id: entry.id,
+          type: entry.type
+        }))
       : [];
+
+    const latestVersion = includeSnapshots
+      ? (manifest.latest && typeof manifest.latest.snapshot === 'string' ? manifest.latest.snapshot : null)
+      : (manifest.latest && typeof manifest.latest.release === 'string' ? manifest.latest.release : null);
 
     return {
       ok: true,
-      latest: manifest.latest && typeof manifest.latest.release === 'string'
-        ? manifest.latest.release
-        : null,
-      versions: releases
+      latest: latestVersion,
+      versions
     };
   } catch (error) {
     const message = error && error.message ? error.message : String(error);

@@ -7,6 +7,7 @@ const progressFillEl = document.getElementById('progressFill');
 const memoryEl = document.getElementById('memoryMb');
 const disableGameConsoleEl = document.getElementById('disableGameConsole');
 const closeLauncherOnStartEl = document.getElementById('closeLauncherOnStart');
+const includeSnapshotsEl = document.getElementById('includeSnapshots');
 const msLoginBtn = document.getElementById('msLoginBtn');
 const msLogoutBtn = document.getElementById('msLogoutBtn');
 const msStatusEl = document.getElementById('msStatus');
@@ -18,6 +19,9 @@ const RAM_STORAGE_KEY = 'launcher.memoryMb';
 const CONSOLE_STORAGE_KEY = 'launcher.disableGameConsole';
 const CLOSE_LAUNCHER_STORAGE_KEY = 'launcher.closeOnStart';
 const VERSION_STORAGE_KEY = 'launcher.gameVersion';
+const SNAPSHOTS_STORAGE_KEY = 'launcher.includeSnapshots';
+
+let availableVersions = [];
 
 const setProgress = (percent, label) => {
   const clamped = Math.max(0, Math.min(100, percent));
@@ -180,12 +184,18 @@ versionEl.addEventListener('change', () => {
   }
 });
 
+includeSnapshotsEl.addEventListener('change', () => {
+  localStorage.setItem(SNAPSHOTS_STORAGE_KEY, includeSnapshotsEl.checked ? '1' : '0');
+  void loadVersions(versionEl.value || localStorage.getItem(VERSION_STORAGE_KEY));
+});
+
 launchForm.addEventListener('submit', async (event) => {
   event.preventDefault();
 
   const formData = new FormData(launchForm);
   const payload = {
     version: String(formData.get('version') || ''),
+    versionType: availableVersions.find((entry) => entry.id === String(formData.get('version') || ''))?.type || 'release',
     memoryMb: Number(formData.get('memoryMb') || 2048),
     disableGameConsole: Boolean(formData.get('disableGameConsole')),
     closeLauncherOnStart: Boolean(formData.get('closeLauncherOnStart')),
@@ -262,17 +272,28 @@ const restoreCloseLauncherPreference = () => {
   closeLauncherOnStartEl.checked = saved === '1';
 };
 
+const restoreSnapshotPreference = () => {
+  const saved = localStorage.getItem(SNAPSHOTS_STORAGE_KEY);
+  includeSnapshotsEl.checked = saved === '1';
+};
+
 const renderVersionOptions = (versions, selectedVersion) => {
   versionEl.innerHTML = '';
+  availableVersions = Array.isArray(versions) ? versions : [];
 
-  versions.forEach((version) => {
+  availableVersions.forEach((versionEntry) => {
+    const version = typeof versionEntry === 'string' ? versionEntry : versionEntry.id;
+    if (!version) {
+      return;
+    }
+
     const option = document.createElement('option');
     option.value = version;
     option.textContent = version;
     versionEl.appendChild(option);
   });
 
-  if (!versions.length) {
+  if (!availableVersions.length) {
     const option = document.createElement('option');
     option.value = '';
     option.textContent = 'Aucune version disponible';
@@ -284,21 +305,26 @@ const renderVersionOptions = (versions, selectedVersion) => {
 
   versionEl.disabled = false;
 
-  if (selectedVersion && versions.includes(selectedVersion)) {
+  const ids = availableVersions.map((entry) => (typeof entry === 'string' ? entry : entry.id));
+  if (selectedVersion && ids.includes(selectedVersion)) {
     versionEl.value = selectedVersion;
     return;
   }
 
-  versionEl.value = versions[0];
+  versionEl.value = ids[0];
 };
 
-const loadVersions = async () => {
-  const savedVersion = localStorage.getItem(VERSION_STORAGE_KEY);
+const loadVersions = async (preferredVersionOverride) => {
+  const savedVersion = preferredVersionOverride || localStorage.getItem(VERSION_STORAGE_KEY);
+  const includeSnapshots = includeSnapshotsEl.checked;
 
   try {
-    const result = await window.mcLauncher.getVersions();
+    const result = await window.mcLauncher.getVersions({ includeSnapshots });
     if (result.ok && Array.isArray(result.versions) && result.versions.length > 0) {
-      const preferredVersion = savedVersion || result.latest || result.versions[0];
+      const firstVersion = typeof result.versions[0] === 'string'
+        ? result.versions[0]
+        : result.versions[0].id;
+      const preferredVersion = savedVersion || result.latest || firstVersion;
       renderVersionOptions(result.versions, preferredVersion);
       if (versionEl.value) {
         localStorage.setItem(VERSION_STORAGE_KEY, versionEl.value);
@@ -309,13 +335,14 @@ const loadVersions = async () => {
   }
 
   const fallbackVersion = savedVersion || '1.21.11';
-  renderVersionOptions([fallbackVersion], fallbackVersion);
+  renderVersionOptions([{ id: fallbackVersion, type: 'release' }], fallbackVersion);
   statusEl.textContent = 'Liste des versions indisponible, version locale utilisée.';
 };
 
 restoreRamPreference();
 restoreConsolePreference();
 restoreCloseLauncherPreference();
+restoreSnapshotPreference();
 setProgress(0, 'Progression: 0%');
 void loadVersions();
 void tryRestoreMicrosoftSession();
