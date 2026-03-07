@@ -13,6 +13,9 @@ const msLoginBtn = document.getElementById('msLoginBtn');
 const msLogoutBtn = document.getElementById('msLogoutBtn');
 const msStatusEl = document.getElementById('msStatus');
 const msAccountSelectEl = document.getElementById('msAccountSelect');
+const accountIdentityEl = document.getElementById('accountIdentity');
+const playerHeadEl = document.getElementById('playerHead');
+const playerNameEl = document.getElementById('playerName');
 const versionEl = document.getElementById('version');
 const updateStatusEl = document.getElementById('updateStatus');
 const checkUpdateBtn = document.getElementById('checkUpdateBtn');
@@ -20,6 +23,7 @@ const installUpdateBtn = document.getElementById('installUpdateBtn');
 const settingsBtn = document.getElementById('settingsBtn');
 const settingsModal = document.getElementById('settingsModal');
 const closeSettingsBtn = document.getElementById('closeSettingsBtn');
+const settingsWindow = settingsModal ? settingsModal.querySelector('.settings-window') : null;
 
 let microsoftConnected = false;
 const RAM_STORAGE_KEY = 'launcher.memoryMb';
@@ -30,6 +34,75 @@ const SNAPSHOTS_STORAGE_KEY = 'launcher.includeSnapshots';
 
 let availableVersions = [];
 let updateReady = false;
+let knownAccounts = [];
+let knownActiveAccountId = null;
+let knownProfile = null;
+
+const normalizeUuid = (value) => {
+  if (typeof value !== 'string') {
+    return '';
+  }
+
+  return value.replace(/-/g, '').trim();
+};
+
+const buildPlayerHeadUrl = (uuid, name) => {
+  const normalizedUuid = normalizeUuid(uuid);
+  if (normalizedUuid) {
+    return `https://mc-heads.net/avatar/${encodeURIComponent(normalizedUuid)}/36`;
+  }
+
+  const safeName = typeof name === 'string' ? name.trim() : '';
+  if (safeName) {
+    return `https://mc-heads.net/avatar/${encodeURIComponent(safeName)}/36`;
+  }
+
+  return 'assets/logo.png';
+};
+
+const hideAccountIdentity = () => {
+  if (!accountIdentityEl || !playerNameEl || !playerHeadEl) {
+    return;
+  }
+
+  accountIdentityEl.classList.add('is-offline');
+  playerNameEl.textContent = 'Aucun compte';
+  playerHeadEl.src = 'assets/logo.png';
+  playerHeadEl.alt = 'Tete du joueur';
+};
+
+const renderAccountIdentity = () => {
+  if (!accountIdentityEl || !playerNameEl || !playerHeadEl) {
+    return;
+  }
+
+  const selectedAccountId = msAccountSelectEl.value || knownActiveAccountId;
+  const account = knownAccounts.find((entry) => entry && entry.id === selectedAccountId) || null;
+  const displayName = (account && account.name) || (knownProfile && knownProfile.name) || '';
+  const playerUuid = (account && account.uuid) || (knownProfile && knownProfile.id) || '';
+
+  if (!displayName) {
+    hideAccountIdentity();
+    return;
+  }
+
+  accountIdentityEl.classList.remove('is-offline');
+  playerNameEl.textContent = displayName;
+  playerHeadEl.alt = `Tete de ${displayName}`;
+  playerHeadEl.dataset.fallback = '0';
+  playerHeadEl.src = buildPlayerHeadUrl(playerUuid, displayName);
+};
+
+if (playerHeadEl) {
+  playerHeadEl.addEventListener('error', () => {
+    if (playerHeadEl.dataset.fallback === '1') {
+      return;
+    }
+
+    playerHeadEl.dataset.fallback = '1';
+    playerHeadEl.src = 'assets/logo.png';
+  });
+}
 
 const setProgress = (percent, label) => {
   const clamped = Math.max(0, Math.min(100, percent));
@@ -44,10 +117,22 @@ const appendLog = (line) => {
 
 const setMicrosoftConnected = (connected, profileName) => {
   microsoftConnected = connected;
-  msStatusEl.textContent = connected ? `Connecté (${profileName || 'Microsoft'})` : 'Non connecté';
+  if (msStatusEl) {
+    msStatusEl.textContent = connected ? `Connecté (${profileName || 'Microsoft'})` : 'Non connecté';
+  }
+
+  if (accountIdentityEl) {
+    if (connected) {
+      accountIdentityEl.classList.remove('is-offline');
+    } else {
+      accountIdentityEl.classList.add('is-offline');
+    }
+  }
 };
 
 const renderAccounts = (accounts, activeAccountId) => {
+  knownAccounts = Array.isArray(accounts) ? accounts : [];
+  knownActiveAccountId = activeAccountId || null;
   msAccountSelectEl.innerHTML = '';
 
   if (!Array.isArray(accounts) || !accounts.length) {
@@ -58,6 +143,7 @@ const renderAccounts = (accounts, activeAccountId) => {
     msAccountSelectEl.value = '';
     msAccountSelectEl.disabled = true;
     msLogoutBtn.disabled = true;
+    hideAccountIdentity();
     return;
   }
 
@@ -70,11 +156,14 @@ const renderAccounts = (accounts, activeAccountId) => {
 
   const hasActive = accounts.some((account) => account.id === activeAccountId);
   msAccountSelectEl.value = hasActive ? activeAccountId : accounts[0].id;
+  knownActiveAccountId = msAccountSelectEl.value;
   msAccountSelectEl.disabled = false;
   msLogoutBtn.disabled = false;
+  renderAccountIdentity();
 };
 
 const applyAccountResponse = (result) => {
+  knownProfile = result && result.profile ? result.profile : null;
   renderAccounts(result.accounts || [], result.activeAccountId || null);
 
   if (result.profile && result.activeAccountId) {
@@ -84,11 +173,15 @@ const applyAccountResponse = (result) => {
 
   if ((result.accounts || []).length > 0) {
     microsoftConnected = false;
-    msStatusEl.textContent = 'Comptes sauvegardés (sélectionne un compte).';
+    if (msStatusEl) {
+      msStatusEl.textContent = 'Comptes sauvegardés (sélectionne un compte).';
+    }
+    renderAccountIdentity();
     return;
   }
 
   setMicrosoftConnected(false);
+  hideAccountIdentity();
 };
 
 window.mcLauncher.onLog((line) => {
@@ -202,15 +295,21 @@ installUpdateBtn.addEventListener('click', async () => {
 });
 
 const setSettingsModalOpen = (open) => {
+  if (!settingsModal || !settingsBtn) {
+    return;
+  }
+
   if (open) {
-    settingsModal.removeAttribute('hidden');
+    settingsModal.classList.add('is-open');
+    settingsModal.setAttribute('aria-hidden', 'false');
     settingsBtn.setAttribute('aria-expanded', 'true');
     settingsBtn.classList.add('is-open');
     settingsBtn.textContent = 'Parametres';
     return;
   }
 
-  settingsModal.setAttribute('hidden', '');
+  settingsModal.classList.remove('is-open');
+  settingsModal.setAttribute('aria-hidden', 'true');
   settingsBtn.setAttribute('aria-expanded', 'false');
   settingsBtn.classList.remove('is-open');
   settingsBtn.textContent = 'Parametres';
@@ -219,8 +318,8 @@ const setSettingsModalOpen = (open) => {
 setSettingsModalOpen(false);
 
 settingsBtn.addEventListener('click', () => {
-  const isHidden = settingsModal.hasAttribute('hidden');
-  setSettingsModalOpen(isHidden);
+  const isOpen = settingsModal.classList.contains('is-open');
+  setSettingsModalOpen(!isOpen);
 });
 
 if (closeSettingsBtn) {
@@ -235,8 +334,14 @@ settingsModal.addEventListener('click', (event) => {
   }
 });
 
+if (settingsWindow) {
+  settingsWindow.addEventListener('click', (event) => {
+    event.stopPropagation();
+  });
+}
+
 document.addEventListener('keydown', (event) => {
-  if (event.key === 'Escape' && !settingsModal.hasAttribute('hidden')) {
+  if (event.key === 'Escape' && settingsModal.classList.contains('is-open')) {
     setSettingsModalOpen(false);
   }
 });
@@ -289,6 +394,7 @@ msLogoutBtn.addEventListener('click', async () => {
 msAccountSelectEl.addEventListener('change', async () => {
   const targetAccountId = msAccountSelectEl.value;
   if (!targetAccountId) {
+    hideAccountIdentity();
     return;
   }
 

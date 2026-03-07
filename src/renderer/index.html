@@ -4,83 +4,114 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Cyril59310 Launcher</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700&family=Rajdhani:wght@600;700&display=swap" rel="stylesheet" />
   <link rel="icon" type="image/png" href="assets/logo.png" />
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
-  <div class="bg-orb orb-1" aria-hidden="true"></div>
-  <div class="bg-orb orb-2" aria-hidden="true"></div>
+  <div class="bg-atmosphere" aria-hidden="true"></div>
 
-  <main class="card">
-    <header class="hero">
-      <img class="hero-icon" src="assets/logo.png" alt="Icône du launcher" />
-      <div>
-        <h1>Cyril59310 Launcher</h1>
-        <p class="subtitle">Launcher Minecraft (Java Edition) Microsoft.</p>
+  <main class="app-shell">
+    <header class="topbar">
+      <div class="brand">
+        <img class="brand-logo" src="assets/logo.png" alt="Icône du launcher" />
+        <div>
+          <h1>Cyril59310 Launcher</h1>
+          <p class="subtitle">Java Edition • Microsoft • Multi-comptes</p>
+        </div>
       </div>
-      <button id="settingsBtn" type="button" class="secondary hero-settings-btn" aria-expanded="false" aria-controls="settingsModal">Parametres</button>
+      <div class="topbar-actions">
+        <button id="settingsBtn" type="button" class="secondary" aria-expanded="false" aria-controls="settingsModal">Parametres</button>
+      </div>
     </header>
 
-    <section class="auth-card">
-      <div class="auth-line">
-        <strong>Compte Microsoft:</strong>
-        <span id="msStatus">Non connecté</span>
-      </div>
-      <label for="msAccountSelect">Compte actif</label>
-      <select id="msAccountSelect" aria-label="Compte Microsoft actif">
-        <option value="">Aucun compte</option>
-      </select>
-      <div class="auth-actions">
-        <button id="msLoginBtn" type="button">Ajouter un compte</button>
-        <button id="msLogoutBtn" type="button" class="secondary">Supprimer le compte actif</button>
-      </div>
+    <section class="layout-grid">
+      <aside class="column-left">
+        <section class="panel">
+          <div class="panel-head">
+            <h2>Compte Microsoft</h2>
+            <div id="accountIdentity" class="account-identity is-offline">
+              <img id="playerHead" class="player-head" src="assets/logo.png" alt="Tete du joueur" width="36" height="36" />
+              <span id="playerName" class="player-name">Aucun compte</span>
+            </div>
+          </div>
+
+          <label for="msAccountSelect">Compte actif</label>
+          <select id="msAccountSelect" aria-label="Compte Microsoft actif">
+            <option value="">Aucun compte</option>
+          </select>
+
+          <div class="row-actions">
+            <button id="msLoginBtn" type="button">Ajouter un compte</button>
+            <button id="msLogoutBtn" type="button" class="secondary">Supprimer le compte actif</button>
+          </div>
+        </section>
+
+        <section class="panel">
+          <div class="panel-head">
+            <h2>Mise a jour</h2>
+            <span id="updateStatus" class="muted">En attente...</span>
+          </div>
+
+          <div class="row-actions">
+            <button id="checkUpdateBtn" type="button" class="secondary">Verifier</button>
+            <button id="installUpdateBtn" type="button" class="secondary" hidden>Installer</button>
+          </div>
+        </section>
+      </aside>
+
+      <section class="column-right">
+        <form id="launchForm" class="panel launch-panel">
+          <div class="panel-head">
+            <h2>Configuration de lancement</h2>
+          </div>
+
+          <div class="field-grid">
+            <div>
+              <label for="version">Version</label>
+              <select id="version" name="version" required>
+                <option value="">Chargement des versions...</option>
+              </select>
+            </div>
+
+            <div>
+              <label for="memoryMb">RAM max</label>
+              <select id="memoryMb" name="memoryMb" required>
+                <option value="4096">4 Go</option>
+                <option value="8192">8 Go</option>
+                <option value="16384">16 Go</option>
+              </select>
+            </div>
+          </div>
+
+          <label class="checkbox-row" for="includeSnapshots">
+            <input id="includeSnapshots" name="includeSnapshots" type="checkbox" />
+            Afficher les versions snapshot
+          </label>
+
+          <div class="row-actions">
+            <button id="launchBtn" type="submit">Lancer Minecraft</button>
+            <button id="openGameFolderBtn" type="button" class="secondary">Ouvrir le dossier du jeu</button>
+          </div>
+        </form>
+
+        <section class="panel console-panel">
+          <div class="status-wrapper">
+            <div id="status">Prêt.</div>
+            <div id="progress">Progression: 0%</div>
+          </div>
+          <div class="progress-bar" aria-hidden="true">
+            <div id="progressFill" class="progress-fill"></div>
+          </div>
+          <pre id="logs" aria-live="polite"></pre>
+        </section>
+      </section>
     </section>
-
-    <section class="update-card">
-      <div class="auth-line">
-        <strong>Mise a jour launcher:</strong>
-        <span id="updateStatus">En attente...</span>
-      </div>
-      <div class="auth-actions">
-        <button id="checkUpdateBtn" type="button" class="secondary">Verifier</button>
-        <button id="installUpdateBtn" type="button" class="secondary" hidden>Installer la mise a jour</button>
-      </div>
-    </section>
-
-    <form id="launchForm">
-      <label for="version">Version</label>
-      <select id="version" name="version" required>
-        <option value="">Chargement des versions...</option>
-      </select>
-
-      <label class="checkbox-row" for="includeSnapshots">
-        <input id="includeSnapshots" name="includeSnapshots" type="checkbox" />
-        Afficher les versions snapshot
-      </label>
-
-      <label for="memoryMb">RAM max</label>
-      <select id="memoryMb" name="memoryMb" required>
-        <option value="4096">4 Go</option>
-        <option value="8192">8 Go</option>
-        <option value="16384">16 Go</option>
-      </select>
-
-      <button id="launchBtn" type="submit">Lancer Minecraft</button>
-      <button id="openGameFolderBtn" type="button" class="secondary">Ouvrir le dossier du jeu</button>
-    </form>
-
-    <div class="status-wrapper">
-      <div id="status">Prêt.</div>
-      <div id="progress">Progression: 0%</div>
-    </div>
-    <div class="progress-bar" aria-hidden="true">
-      <div id="progressFill" class="progress-fill"></div>
-    </div>
-
-    <pre id="logs" aria-live="polite"></pre>
   </main>
 
-  <div id="settingsModal" class="settings-modal" hidden>
+  <div id="settingsModal" class="settings-modal" aria-hidden="true">
     <section class="settings-window" role="dialog" aria-modal="true" aria-labelledby="settingsTitle">
       <div class="settings-header">
         <h2 id="settingsTitle" class="settings-title">Parametres du launcher</h2>

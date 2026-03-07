@@ -767,8 +767,8 @@ async function ensureMicrosoftSession(preferredAccountId) {
 
 function createWindow() {
   mainWindow = new BrowserWindow({
-    width: 920,
-    height: 920,
+    width: 1280,
+    height: 720,
     resizable: false,
     autoHideMenuBar: true,
     icon: path.join(__dirname, 'renderer', 'assets', 'logo.png'),
