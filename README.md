@@ -1,6 +1,13 @@
+<div align="center" width="100%">
+<img width="256" height="256" alt="logo" src="https://github.com/user-attachments/assets/2b819c66-81f2-43be-9364-d2b544318c98" />
+</div>
+
 # Cyril59310 Launcher
 
 Launcher Minecraft Java Edition base sur Electron, avec connexion Microsoft et gestion de plusieurs comptes.
+
+<img width="1266" height="713" alt="image" src="https://github.com/user-attachments/assets/a44816b2-ede7-4a4f-8312-87149ea2f8b3" />
+
 
 ## Fonctionnalites
 
