@@ -14,6 +14,9 @@ const msLogoutBtn = document.getElementById('msLogoutBtn');
 const msStatusEl = document.getElementById('msStatus');
 const msAccountSelectEl = document.getElementById('msAccountSelect');
 const versionEl = document.getElementById('version');
+const updateStatusEl = document.getElementById('updateStatus');
+const checkUpdateBtn = document.getElementById('checkUpdateBtn');
+const installUpdateBtn = document.getElementById('installUpdateBtn');
 
 let microsoftConnected = false;
 const RAM_STORAGE_KEY = 'launcher.memoryMb';
@@ -23,6 +26,7 @@ const VERSION_STORAGE_KEY = 'launcher.gameVersion';
 const SNAPSHOTS_STORAGE_KEY = 'launcher.includeSnapshots';
 
 let availableVersions = [];
+let updateReady = false;
 
 const setProgress = (percent, label) => {
   const clamped = Math.max(0, Math.min(100, percent));
@@ -105,6 +109,93 @@ window.mcLauncher.onProgress((progress) => {
   }
 
   setProgress(0, 'Téléchargement...');
+});
+
+window.mcLauncher.onUpdate((event) => {
+  const type = event && event.type ? event.type : 'unknown';
+
+  if (type === 'checking') {
+    updateStatusEl.textContent = 'Verification en cours...';
+    return;
+  }
+
+  if (type === 'available') {
+    const version = event && event.version ? event.version : 'nouvelle version';
+    updateStatusEl.textContent = `Mise a jour disponible (${version}), telechargement...`;
+    appendLog(`[update] Mise a jour detectee: ${version}`);
+    return;
+  }
+
+  if (type === 'download-progress') {
+    const percent = Math.max(0, Math.min(100, Number(event && event.percent ? event.percent : 0)));
+    updateStatusEl.textContent = `Telechargement mise a jour: ${Math.round(percent)}%`;
+    return;
+  }
+
+  if (type === 'downloaded') {
+    updateReady = true;
+    const version = event && event.version ? event.version : 'nouvelle version';
+    updateStatusEl.textContent = `Pret a installer (${version})`;
+    installUpdateBtn.hidden = false;
+    appendLog('[update] Mise a jour telechargee et prete a etre installee.');
+    return;
+  }
+
+  if (type === 'none') {
+    updateStatusEl.textContent = 'Launcher a jour';
+    appendLog('[update] Aucune mise a jour disponible.');
+    return;
+  }
+
+  if (type === 'disabled') {
+    updateStatusEl.textContent = event && event.message ? event.message : 'Mise a jour auto indisponible.';
+    appendLog(`[update] ${updateStatusEl.textContent}`);
+    return;
+  }
+
+  if (type === 'error') {
+    const message = event && event.message ? event.message : 'Erreur inconnue.';
+    updateStatusEl.textContent = `Erreur update: ${message}`;
+    appendLog(`[update:error] ${message}`);
+  }
+});
+
+checkUpdateBtn.addEventListener('click', async () => {
+  checkUpdateBtn.disabled = true;
+
+  try {
+    const result = await window.mcLauncher.checkForUpdates();
+    if (!result.ok) {
+      updateStatusEl.textContent = result.message || 'Verification impossible.';
+      appendLog(`[update] ${result.message || 'Verification impossible.'}`);
+    } else {
+      updateStatusEl.textContent = 'Verification lancee...';
+    }
+  } catch (error) {
+    const message = error && error.message ? error.message : String(error);
+    updateStatusEl.textContent = `Erreur update: ${message}`;
+    appendLog(`[update:error] ${message}`);
+  } finally {
+    checkUpdateBtn.disabled = false;
+  }
+});
+
+installUpdateBtn.addEventListener('click', async () => {
+  if (!updateReady) {
+    return;
+  }
+
+  installUpdateBtn.disabled = true;
+
+  try {
+    const result = await window.mcLauncher.installUpdateNow();
+    updateStatusEl.textContent = result.message || 'Installation de la mise a jour...';
+  } catch (error) {
+    const message = error && error.message ? error.message : String(error);
+    updateStatusEl.textContent = `Erreur update: ${message}`;
+    appendLog(`[update:error] ${message}`);
+    installUpdateBtn.disabled = false;
+  }
 });
 
 msLoginBtn.addEventListener('click', async () => {

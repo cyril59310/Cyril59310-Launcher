@@ -4,6 +4,8 @@ contextBridge.exposeInMainWorld('mcLauncher', {
   start: (payload) => ipcRenderer.invoke('launcher:start', payload),
   getVersions: (options) => ipcRenderer.invoke('launcher:versions', options),
   openGameFolder: () => ipcRenderer.invoke('launcher:open-game-folder'),
+  checkForUpdates: () => ipcRenderer.invoke('updater:check'),
+  installUpdateNow: () => ipcRenderer.invoke('updater:install'),
   microsoftLogin: () => ipcRenderer.invoke('auth:microsoft-login'),
   microsoftRestore: () => ipcRenderer.invoke('auth:microsoft-restore'),
   microsoftList: () => ipcRenderer.invoke('auth:microsoft-list'),
@@ -15,5 +17,8 @@ contextBridge.exposeInMainWorld('mcLauncher', {
   },
   onProgress: (handler) => {
     ipcRenderer.on('launcher:progress', (_, progress) => handler(progress));
+  },
+  onUpdate: (handler) => {
+    ipcRenderer.on('launcher:update', (_, event) => handler(event));
   }
 });

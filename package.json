@@ -16,6 +16,7 @@
   "author": "Cyril59310",
   "license": "MIT",
   "dependencies": {
+    "electron-updater": "^6.8.3",
     "keytar": "^7.9.0",
     "minecraft-launcher-core": "^3.18.0",
     "msmc": "^5.0.5"
@@ -27,6 +28,14 @@
   "build": {
     "appId": "fr.cyril.cyril59310-launcher",
     "productName": "Cyril59310 Launcher",
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "Cyril59310",
+        "repo": "Cyril59310-Launcher",
+        "releaseType": "release"
+      }
+    ],
     "directories": {
       "output": "build"
     },

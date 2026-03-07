@@ -95,6 +95,14 @@ form {
   padding: 10px;
 }
 
+.update-card {
+  margin-bottom: 14px;
+  background: #121722cc;
+  border: 1px solid #3a4662;
+  border-radius: 10px;
+  padding: 10px;
+}
+
 .auth-line {
   display: flex;
   justify-content: space-between;

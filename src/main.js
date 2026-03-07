@@ -3,6 +3,7 @@ const fs = require('fs');
 const https = require('https');
 const { spawn } = require('child_process');
 const { app, BrowserWindow, ipcMain, shell } = require('electron');
+const { autoUpdater } = require('electron-updater');
 const { Client } = require('minecraft-launcher-core');
 const { Auth } = require('msmc');
 const keytar = require('keytar');
@@ -12,6 +13,7 @@ let isLaunching = false;
 let microsoftAuth = null;
 let microsoftProfile = null;
 let microsoftAccountId = null;
+let updaterConfigured = false;
 
 const launcherRoot = () => path.join(app.getPath('appData'), '.Cyril59310-Launcher');
 const authStorePath = () => path.join(launcherRoot(), 'auth.json');
@@ -421,6 +423,76 @@ function sendLog(line) {
   }
 }
 
+function sendUpdateEvent(type, payload = {}) {
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.send('launcher:update', { type, ...payload });
+  }
+}
+
+function isPortablePackage() {
+  return Boolean(process.env.PORTABLE_EXECUTABLE_DIR);
+}
+
+function setupAutoUpdater() {
+  if (updaterConfigured) {
+    return;
+  }
+
+  updaterConfigured = true;
+  autoUpdater.autoDownload = true;
+  autoUpdater.autoInstallOnAppQuit = true;
+
+  autoUpdater.on('checking-for-update', () => {
+    sendUpdateEvent('checking');
+    sendLog('[update] Verification des mises a jour...');
+  });
+
+  autoUpdater.on('update-available', (info) => {
+    sendUpdateEvent('available', { version: info && info.version ? String(info.version) : null });
+    sendLog(`[update] Mise a jour disponible${info && info.version ? `: ${info.version}` : ''}. Telechargement...`);
+  });
+
+  autoUpdater.on('update-not-available', () => {
+    sendUpdateEvent('none');
+    sendLog('[update] Aucune mise a jour disponible.');
+  });
+
+  autoUpdater.on('download-progress', (progress) => {
+    sendUpdateEvent('download-progress', {
+      percent: Number(progress && progress.percent ? progress.percent : 0)
+    });
+  });
+
+  autoUpdater.on('update-downloaded', (info) => {
+    sendUpdateEvent('downloaded', { version: info && info.version ? String(info.version) : null });
+    sendLog('[update] Mise a jour telechargee. Clique sur "Installer la mise a jour" pour redemarrer.');
+  });
+
+  autoUpdater.on('error', (error) => {
+    const message = error && error.message ? error.message : String(error);
+    sendUpdateEvent('error', { message });
+    sendLog(`[update] Erreur mise a jour: ${message}`);
+  });
+}
+
+async function checkForLauncherUpdates(isManual = false) {
+  if (!app.isPackaged) {
+    return { ok: false, message: 'Mise a jour indisponible en mode developpement.' };
+  }
+
+  if (isPortablePackage()) {
+    return { ok: false, message: 'Mise a jour automatique indisponible pour la version portable.' };
+  }
+
+  try {
+    await autoUpdater.checkForUpdates();
+    return { ok: true, message: isManual ? 'Verification des mises a jour lancee.' : 'OK' };
+  } catch (error) {
+    const message = error && error.message ? error.message : String(error);
+    return { ok: false, message: `Verification impossible: ${message}` };
+  }
+}
+
 function readAuthStore() {
   try {
     if (!fs.existsSync(authStorePath())) {
@@ -712,6 +784,19 @@ function createWindow() {
 
 app.whenReady().then(() => {
   createWindow();
+  setupAutoUpdater();
+
+  if (app.isPackaged && !isPortablePackage()) {
+    setTimeout(() => {
+      void checkForLauncherUpdates(false);
+    }, 4000);
+  } else {
+    sendUpdateEvent('disabled', {
+      message: app.isPackaged
+        ? 'Mise a jour auto indisponible pour la version portable.'
+        : 'Mise a jour auto indisponible en developpement.'
+    });
+  }
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {
@@ -903,6 +988,26 @@ ipcMain.handle('launcher:open-game-folder', async () => {
     const message = error && error.message ? error.message : String(error);
     return { ok: false, message: `Erreur ouverture dossier: ${message}`, path: launcherRoot() };
   }
+});
+
+ipcMain.handle('updater:check', async () => {
+  return checkForLauncherUpdates(true);
+});
+
+ipcMain.handle('updater:install', async () => {
+  if (!app.isPackaged) {
+    return { ok: false, message: 'Installation de mise a jour indisponible en developpement.' };
+  }
+
+  if (isPortablePackage()) {
+    return { ok: false, message: 'Installation auto indisponible pour la version portable.' };
+  }
+
+  setImmediate(() => {
+    autoUpdater.quitAndInstall(true, true);
+  });
+
+  return { ok: true, message: 'Redemarrage pour appliquer la mise a jour...' };
 });
 
 ipcMain.handle('auth:microsoft-login', async () => {

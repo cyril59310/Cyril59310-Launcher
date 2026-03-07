@@ -14,6 +14,7 @@ Launcher Minecraft Java Edition base sur Electron, avec connexion Microsoft et g
 - Option pour fermer le launcher au demarrage du jeu
 - Bouton pour ouvrir le dossier du jeu
 - Téléchargement automatique de la bonne version de Java
+- Mise a jour automatique du launcher depuis GitHub Releases (hors mode dev et hors build portable)
 
 ## Stack technique
 
@@ -46,6 +47,30 @@ npm start
 - `npm start` : demarre l'application Electron
 - `npm run build` : genere un installateur Windows (NSIS)
 - `npm run build:portable` : genere une version portable Windows
+
+Les mises a jour automatiques fonctionnent sur les builds installables publies sur GitHub Releases.
+La version portable ne supporte pas l'installation automatique d'update.
+
+## Mise a jour automatique
+
+- Le launcher verifie automatiquement les mises a jour au demarrage (build package uniquement).
+- Une verification manuelle est disponible depuis l'interface.
+- Quand une mise a jour est telechargee, un bouton permet de redemarrer pour l'installer.
+
+Configuration utilisee:
+
+- provider: `github`
+- owner: `Cyril59310`
+- repo: `Cyril59310-Launcher`
+
+Pense a publier les artefacts de build (`.exe`, `latest.yml`, etc.) sur GitHub Releases pour que l'update fonctionne.
+
+Release automatique:
+
+- Un workflow GitHub Actions est fourni: `.github/workflows/release.yml`
+- Il se lance sur les tags `v*` (exemple: `v1.3.1`)
+- Il build Windows NSIS et publie automatiquement les artefacts sur GitHub Releases
+- Le fichier `latest.yml` est publie avec l'installateur, ce qui alimente `electron-updater`
 
 Les builds sont produits dans le dossier `build/`.
 
