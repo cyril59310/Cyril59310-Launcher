@@ -862,6 +862,9 @@ ipcMain.handle('launcher:start', async (_, payload) => {
     authorization,
     root: minecraftDirectory,
     javaPath: javaRuntime.javaPath,
+    overrides: {
+      detached: hideConsole
+    },
     version: {
       number: trimmedVersion,
       type: resolvedVersionType

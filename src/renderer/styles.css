@@ -64,6 +64,15 @@ body {
   margin-bottom: 10px;
 }
 
+.hero-settings-btn {
+  margin-left: auto;
+  margin-top: 0;
+}
+
+.hero-settings-btn.is-open {
+  background: linear-gradient(135deg, #2bc89f 0%, #1fa680 100%);
+}
+
 .hero-icon {
   width: 44px;
   height: 44px;
@@ -101,6 +110,48 @@ form {
   border: 1px solid #3a4662;
   border-radius: 10px;
   padding: 10px;
+}
+
+.settings-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+  display: grid;
+  place-items: center;
+  background: rgba(5, 8, 15, 0.62);
+  backdrop-filter: blur(3px);
+}
+
+.settings-modal[hidden] {
+  display: none !important;
+}
+
+.settings-window {
+  width: min(420px, calc(100vw - 36px));
+  background: linear-gradient(180deg, rgba(22, 26, 38, 0.98) 0%, rgba(16, 19, 29, 0.98) 100%);
+  border: 1px solid #3a4662;
+  border-radius: 12px;
+  padding: 12px;
+  display: grid;
+  gap: 10px;
+  box-shadow: 0 20px 36px rgba(0, 0, 0, 0.5);
+}
+
+.settings-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.settings-close-btn {
+  margin-top: 0;
+}
+
+.settings-title {
+  margin: 0 0 4px;
+  font-size: 14px;
+  color: #dbe2f0;
 }
 
 .auth-line {

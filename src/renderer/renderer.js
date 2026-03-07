@@ -17,6 +17,9 @@ const versionEl = document.getElementById('version');
 const updateStatusEl = document.getElementById('updateStatus');
 const checkUpdateBtn = document.getElementById('checkUpdateBtn');
 const installUpdateBtn = document.getElementById('installUpdateBtn');
+const settingsBtn = document.getElementById('settingsBtn');
+const settingsModal = document.getElementById('settingsModal');
+const closeSettingsBtn = document.getElementById('closeSettingsBtn');
 
 let microsoftConnected = false;
 const RAM_STORAGE_KEY = 'launcher.memoryMb';
@@ -198,6 +201,46 @@ installUpdateBtn.addEventListener('click', async () => {
   }
 });
 
+const setSettingsModalOpen = (open) => {
+  if (open) {
+    settingsModal.removeAttribute('hidden');
+    settingsBtn.setAttribute('aria-expanded', 'true');
+    settingsBtn.classList.add('is-open');
+    settingsBtn.textContent = 'Parametres';
+    return;
+  }
+
+  settingsModal.setAttribute('hidden', '');
+  settingsBtn.setAttribute('aria-expanded', 'false');
+  settingsBtn.classList.remove('is-open');
+  settingsBtn.textContent = 'Parametres';
+};
+
+setSettingsModalOpen(false);
+
+settingsBtn.addEventListener('click', () => {
+  const isHidden = settingsModal.hasAttribute('hidden');
+  setSettingsModalOpen(isHidden);
+});
+
+if (closeSettingsBtn) {
+  closeSettingsBtn.addEventListener('click', () => {
+    setSettingsModalOpen(false);
+  });
+}
+
+settingsModal.addEventListener('click', (event) => {
+  if (event.target === settingsModal) {
+    setSettingsModalOpen(false);
+  }
+});
+
+document.addEventListener('keydown', (event) => {
+  if (event.key === 'Escape' && !settingsModal.hasAttribute('hidden')) {
+    setSettingsModalOpen(false);
+  }
+});
+
 msLoginBtn.addEventListener('click', async () => {
   msLoginBtn.disabled = true;
   statusEl.textContent = 'Ajout du compte Microsoft en cours...';
@@ -289,8 +332,8 @@ launchForm.addEventListener('submit', async (event) => {
     version: String(formData.get('version') || ''),
     versionType: availableVersions.find((entry) => entry.id === String(formData.get('version') || ''))?.type || 'release',
     memoryMb: Number(formData.get('memoryMb') || 2048),
-    disableGameConsole: Boolean(formData.get('disableGameConsole')),
-    closeLauncherOnStart: Boolean(formData.get('closeLauncherOnStart')),
+    disableGameConsole: disableGameConsoleEl.checked,
+    closeLauncherOnStart: closeLauncherOnStartEl.checked,
     accountId: msAccountSelectEl.value || null
   };
 
