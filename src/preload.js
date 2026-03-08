@@ -7,7 +7,7 @@ contextBridge.exposeInMainWorld('mcLauncher', {
   listProfiles: () => ipcRenderer.invoke('profiles:list'),
   createProfile: (name) => ipcRenderer.invoke('profiles:create', name),
   updateProfile: (payload) => ipcRenderer.invoke('profiles:update', payload),
-  deleteProfile: (profileId) => ipcRenderer.invoke('profiles:delete', profileId),
+  deleteProfile: (payload) => ipcRenderer.invoke('profiles:delete', payload),
   chooseProfileFolder: (initialPath) => ipcRenderer.invoke('profiles:choose-folder', initialPath),
   checkForUpdates: () => ipcRenderer.invoke('updater:check'),
   installUpdateNow: () => ipcRenderer.invoke('updater:install'),

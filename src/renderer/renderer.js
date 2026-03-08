@@ -12,10 +12,12 @@ const includeSnapshotsEl = document.getElementById('includeSnapshots');
 const profileSelectEl = document.getElementById('profileSelect');
 const profileNameEl = document.getElementById('profileName');
 const profileGameDirectoryEl = document.getElementById('profileGameDirectory');
+const profileNoticeEl = document.getElementById('profileNotice');
 const activeProfileLabelEl = document.getElementById('activeProfileLabel');
 const openProfileSettingsBtn = document.getElementById('openProfileSettingsBtn');
 const profileSettingsModal = document.getElementById('profileSettingsModal');
 const closeProfileSettingsBtn = document.getElementById('closeProfileSettingsBtn');
+const confirmProfileSettingsBtn = document.getElementById('confirmProfileSettingsBtn');
 const profileSettingsWindow = profileSettingsModal ? profileSettingsModal.querySelector('.profile-settings-window') : null;
 const browseProfileFolderBtn = document.getElementById('browseProfileFolderBtn');
 const newProfileBtn = document.getElementById('newProfileBtn');
@@ -51,6 +53,7 @@ let knownActiveAccountId = null;
 let knownProfile = null;
 let knownProfiles = [];
 let activeProfileId = null;
+let profileNoticeTimeout = null;
 
 const normalizeUuid = (value) => {
   if (typeof value !== 'string') {
@@ -127,6 +130,60 @@ const setProgress = (percent, label) => {
 const appendLog = (line) => {
   logsEl.textContent += `${line}\n`;
   logsEl.scrollTop = logsEl.scrollHeight;
+};
+
+const setProfileNotice = (message, type = 'info', persist = false) => {
+  if (!profileNoticeEl) {
+    return;
+  }
+
+  if (profileNoticeTimeout) {
+    clearTimeout(profileNoticeTimeout);
+    profileNoticeTimeout = null;
+  }
+
+  const safeType = ['success', 'error', 'info'].includes(type) ? type : 'info';
+  profileNoticeEl.textContent = message;
+  profileNoticeEl.classList.remove('notice-success', 'notice-error', 'notice-info');
+  profileNoticeEl.classList.add(`notice-${safeType}`);
+  profileNoticeEl.classList.add('is-visible');
+
+  if (!persist) {
+    profileNoticeTimeout = setTimeout(() => {
+      profileNoticeEl.classList.remove('is-visible');
+      profileNoticeEl.textContent = '';
+    }, 2800);
+  }
+};
+
+const applyStoredProfileVersion = async (profile) => {
+  const targetVersion = profile && typeof profile.version === 'string'
+    ? profile.version.trim()
+    : '';
+
+  if (!targetVersion) {
+    return;
+  }
+
+  const hasVersionOption = () => Array.from(versionEl.options).some((opt) => opt.value === targetVersion);
+
+  if (!hasVersionOption()) {
+    await loadVersions(targetVersion);
+  }
+
+  if (!hasVersionOption() && !includeSnapshotsEl.checked) {
+    includeSnapshotsEl.checked = true;
+    localStorage.setItem(SNAPSHOTS_STORAGE_KEY, '1');
+    await loadVersions(targetVersion);
+  }
+
+  if (!hasVersionOption()) {
+    setProfileNotice(`Version du profil introuvable: ${targetVersion}`, 'error', true);
+    return;
+  }
+
+  versionEl.value = targetVersion;
+  localStorage.setItem(VERSION_STORAGE_KEY, targetVersion);
 };
 
 const getActiveProfile = () => {
@@ -216,7 +273,6 @@ const persistActiveProfile = async ({ showStatus = false } = {}) => {
     id: profile.id,
     setActive: true,
     name: profileNameEl ? profileNameEl.value : profile.name,
-    version: versionEl ? versionEl.value : profile.version,
     gameDirectory: profileGameDirectoryEl ? profileGameDirectoryEl.value : profile.gameDirectory
   };
 
@@ -225,6 +281,7 @@ const persistActiveProfile = async ({ showStatus = false } = {}) => {
     if (showStatus) {
       statusEl.textContent = result && result.message ? result.message : 'Impossible d\'enregistrer le profil.';
     }
+    setProfileNotice(result && result.message ? result.message : 'Impossible d\'enregistrer le profil.', 'error');
     return false;
   }
 
@@ -233,6 +290,7 @@ const persistActiveProfile = async ({ showStatus = false } = {}) => {
   if (showStatus) {
     statusEl.textContent = 'Profil mis a jour.';
   }
+  setProfileNotice('Profil enregistre avec succes.', 'success');
   return true;
 };
 
@@ -465,6 +523,9 @@ if (openProfileSettingsBtn) {
   openProfileSettingsBtn.addEventListener('click', () => {
     const isOpen = profileSettingsModal && profileSettingsModal.classList.contains('is-open');
     setProfileSettingsModalOpen(!isOpen);
+    if (!isOpen) {
+      setProfileNotice('Configure ton profil puis clique sur Confirmer.', 'info', true);
+    }
   });
 }
 
@@ -600,13 +661,15 @@ if (profileSelectEl) {
     const result = await window.mcLauncher.updateProfile({ id: profileId, setActive: true });
     if (!result || !result.ok) {
       statusEl.textContent = result && result.message ? result.message : 'Impossible de selectionner le profil.';
+      setProfileNotice(result && result.message ? result.message : 'Impossible de selectionner le profil.', 'error');
       return;
     }
 
     renderProfiles(result.profiles || [], result.activeProfileId || null);
     const profile = applyActiveProfileToForm();
     statusEl.textContent = `Profil actif: ${profile?.name || 'Profil'}`;
-    void loadVersions((profile && profile.version) || localStorage.getItem(VERSION_STORAGE_KEY));
+    setProfileNotice(`Profil actif: ${profile?.name || 'Profil'}`, 'success');
+    await applyStoredProfileVersion(profile);
   });
 }
 
@@ -616,13 +679,15 @@ if (newProfileBtn) {
     const result = await window.mcLauncher.createProfile(suggestedName);
     if (!result || !result.ok) {
       statusEl.textContent = result && result.message ? result.message : 'Creation du profil impossible.';
+      setProfileNotice(result && result.message ? result.message : 'Creation du profil impossible.', 'error');
       return;
     }
 
     renderProfiles(result.profiles || [], result.activeProfileId || null);
     const profile = applyActiveProfileToForm();
     statusEl.textContent = `Profil cree: ${profile?.name || 'Nouveau profil'}`;
-    void loadVersions((profile && profile.version) || localStorage.getItem(VERSION_STORAGE_KEY));
+    setProfileNotice(`Profil cree: ${profile?.name || 'Nouveau profil'}`, 'success');
+    await applyStoredProfileVersion(profile);
   });
 }
 
@@ -644,16 +709,32 @@ if (deleteProfileBtn) {
       return;
     }
 
-    const result = await window.mcLauncher.deleteProfile(profile.id);
+    const shouldDeleteDirectory = window.confirm(
+      `Supprimer aussi le dossier du profil ?\n\n${profile.gameDirectory || ''}`
+    );
+
+    const result = await window.mcLauncher.deleteProfile({
+      id: profile.id,
+      deleteGameDirectory: shouldDeleteDirectory
+    });
     if (!result || !result.ok) {
       statusEl.textContent = result && result.message ? result.message : 'Suppression impossible.';
+      setProfileNotice(result && result.message ? result.message : 'Suppression impossible.', 'error');
       return;
     }
 
     renderProfiles(result.profiles || [], result.activeProfileId || null);
     const updatedProfile = applyActiveProfileToForm();
     statusEl.textContent = 'Profil supprime.';
-    void loadVersions((updatedProfile && updatedProfile.version) || localStorage.getItem(VERSION_STORAGE_KEY));
+    setProfileNotice(
+      shouldDeleteDirectory ? 'Profil et dossier supprimes.' : 'Profil supprime (dossier conserve).',
+      'success'
+    );
+    if (updatedProfile) {
+      await applyStoredProfileVersion(updatedProfile);
+    } else {
+      await loadVersions(versionEl.value || localStorage.getItem(VERSION_STORAGE_KEY));
+    }
   });
 }
 
@@ -667,13 +748,27 @@ if (browseProfileFolderBtn) {
 
     if (!result.ok || !result.path) {
       statusEl.textContent = result && result.message ? result.message : 'Dossier invalide.';
+      setProfileNotice(result && result.message ? result.message : 'Dossier invalide.', 'error');
       return;
     }
 
     if (profileGameDirectoryEl) {
       profileGameDirectoryEl.value = result.path;
     }
+    setProfileNotice('Dossier du profil modifie.', 'info', true);
     await persistActiveProfile({ showStatus: true });
+  });
+}
+
+if (confirmProfileSettingsBtn) {
+  confirmProfileSettingsBtn.addEventListener('click', async () => {
+    confirmProfileSettingsBtn.disabled = true;
+    const ok = await persistActiveProfile({ showStatus: true });
+    if (ok) {
+      setProfileNotice('Profil confirme.', 'success');
+      setProfileSettingsModalOpen(false);
+    }
+    confirmProfileSettingsBtn.disabled = false;
   });
 }
 
@@ -708,6 +803,23 @@ launchForm.addEventListener('submit', async (event) => {
   localStorage.setItem(CONSOLE_STORAGE_KEY, payload.disableGameConsole ? '1' : '0');
   localStorage.setItem(CLOSE_LAUNCHER_STORAGE_KEY, payload.closeLauncherOnStart ? '1' : '0');
   localStorage.setItem(VERSION_STORAGE_KEY, payload.version);
+
+  const activeProfile = getActiveProfile();
+  if (activeProfile && activeProfile.id && payload.version) {
+    try {
+      const profileUpdate = await window.mcLauncher.updateProfile({
+        id: activeProfile.id,
+        setActive: true,
+        version: payload.version
+      });
+
+      if (profileUpdate && profileUpdate.ok) {
+        renderProfiles(profileUpdate.profiles || [], profileUpdate.activeProfileId || null);
+        applyActiveProfileToForm();
+      }
+    } catch {
+    }
+  }
 
   if (!microsoftConnected || !payload.accountId) {
     statusEl.textContent = 'Connecte un compte Microsoft avant de lancer.';
@@ -886,9 +998,9 @@ restoreSnapshotPreference();
 setProgress(0, 'Progression: 0%');
 
 const initializeRenderer = async () => {
-  const activeProfile = await loadProfiles();
-  const preferredVersion = (activeProfile && activeProfile.version) || undefined;
-  await loadVersions(preferredVersion);
+  await loadProfiles();
+  await loadVersions();
+  await applyStoredProfileVersion(getActiveProfile());
   await tryRestoreMicrosoftSession();
 };
 

@@ -131,6 +131,25 @@ function ensureProfileDirectory(gameDirectory) {
   fs.mkdirSync(gameDirectory, { recursive: true });
 }
 
+function isDangerousDeletePath(directoryPath) {
+  const normalized = normalizeGameDirectoryPath(directoryPath);
+  if (!normalized) {
+    return true;
+  }
+
+  const parsed = path.parse(normalized);
+  if (normalized === parsed.root) {
+    return true;
+  }
+
+  const protectedRoots = [
+    normalizeGameDirectoryPath(launcherRoot()),
+    normalizeGameDirectoryPath(app.getPath('appData'))
+  ].filter(Boolean);
+
+  return protectedRoots.includes(normalized);
+}
+
 function publicProfiles(store) {
   return store.profiles.map((entry) => ({
     id: entry.id,
@@ -1179,17 +1198,41 @@ ipcMain.handle('profiles:update', async (_, payload) => {
   return profilesResponse(store, true, 'Profil mis a jour.');
 });
 
-ipcMain.handle('profiles:delete', async (_, profileId) => {
+ipcMain.handle('profiles:delete', async (_, payload) => {
   const store = readProfilesStore();
   if (store.profiles.length <= 1) {
     return profilesResponse(store, false, 'Impossible de supprimer le dernier profil.');
   }
 
-  const targetId = typeof profileId === 'string' ? profileId : '';
-  const filtered = store.profiles.filter((entry) => entry.id !== targetId);
-  if (filtered.length === store.profiles.length) {
+  const targetId = typeof payload === 'string'
+    ? payload
+    : (typeof payload?.id === 'string' ? payload.id : '');
+  const deleteGameDirectory = typeof payload === 'object' && payload !== null
+    ? Boolean(payload.deleteGameDirectory)
+    : false;
+
+  const targetProfile = store.profiles.find((entry) => entry.id === targetId) || null;
+  if (!targetProfile) {
     return profilesResponse(store, false, 'Profil introuvable.');
   }
+
+  if (deleteGameDirectory) {
+    const targetDirectory = normalizeGameDirectoryPath(targetProfile.gameDirectory);
+    if (!targetDirectory || isDangerousDeletePath(targetDirectory)) {
+      return profilesResponse(store, false, 'Suppression du dossier refusee (chemin protege).');
+    }
+
+    try {
+      if (fs.existsSync(targetDirectory)) {
+        fs.rmSync(targetDirectory, { recursive: true, force: true });
+      }
+    } catch (error) {
+      const message = error && error.message ? error.message : String(error);
+      return profilesResponse(store, false, `Impossible de supprimer le dossier du profil: ${message}`);
+    }
+  }
+
+  const filtered = store.profiles.filter((entry) => entry.id !== targetId);
 
   store.profiles = filtered;
   if (!store.profiles.some((entry) => entry.id === store.activeProfileId)) {
@@ -1197,7 +1240,7 @@ ipcMain.handle('profiles:delete', async (_, profileId) => {
   }
 
   writeProfilesStore(store);
-  return profilesResponse(store, true, 'Profil supprime.');
+  return profilesResponse(store, true, deleteGameDirectory ? 'Profil et dossier supprimes.' : 'Profil supprime.');
 });
 
 ipcMain.handle('profiles:choose-folder', async (_, initialPath) => {

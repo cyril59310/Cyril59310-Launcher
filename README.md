@@ -22,6 +22,7 @@ Launcher Minecraft Java Edition base sur Electron, avec connexion Microsoft et g
 - Bouton pour ouvrir le dossier du jeu
 - Téléchargement automatique de la bonne version de Java
 - Mise a jour automatique du launcher depuis GitHub Releases (hors mode dev et hors build portable)
+- Prend en charge les profils pour isoler les instances
 
 ## Stack technique
 
@@ -78,6 +79,7 @@ Release automatique:
 - Il se lance sur les tags `v*` (exemple: `v1.3.1`)
 - Il build Windows NSIS et publie automatiquement les artefacts sur GitHub Releases
 - Le fichier `latest.yml` est publie avec l'installateur, ce qui alimente `electron-updater`
+- Pour publier une release `git tag vX.X.X` et `git push origin vX.X.X`
 
 Les builds sont produits dans le dossier `build/`.
 

@@ -239,6 +239,44 @@ input[type="text"][readonly] {
   gap: 10px;
 }
 
+.profile-notice {
+  min-height: 42px;
+  display: flex;
+  align-items: center;
+  border-radius: 10px;
+  border: 1px solid rgba(158, 186, 196, 0.35);
+  background: rgba(11, 20, 25, 0.84);
+  color: var(--muted);
+  padding: 10px 12px;
+  font-size: 0.9rem;
+  visibility: hidden;
+  opacity: 0;
+  transition: opacity 0.18s ease;
+}
+
+.profile-notice.is-visible {
+  visibility: visible;
+  opacity: 1;
+}
+
+.profile-notice.notice-success {
+  border-color: rgba(70, 216, 143, 0.55);
+  background: rgba(25, 58, 43, 0.55);
+  color: #c3f3dd;
+}
+
+.profile-notice.notice-error {
+  border-color: rgba(239, 68, 68, 0.6);
+  background: rgba(82, 28, 28, 0.52);
+  color: #ffd1d1;
+}
+
+.profile-notice.notice-info {
+  border-color: rgba(158, 186, 196, 0.35);
+  background: rgba(11, 20, 25, 0.84);
+  color: var(--muted);
+}
+
 .profile-summary-row {
   display: flex;
   align-items: center;
