@@ -1065,6 +1065,13 @@ ipcMain.handle('launcher:start', async (_, payload) => {
   });
 });
 
+ipcMain.handle('launcher:app-version', async () => {
+  return {
+    ok: true,
+    version: app.getVersion()
+  };
+});
+
 ipcMain.handle('launcher:versions', async (_, options) => {
   const includeSnapshots = Boolean(options && options.includeSnapshots);
 

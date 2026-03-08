@@ -38,6 +38,7 @@ const settingsBtn = document.getElementById('settingsBtn');
 const settingsModal = document.getElementById('settingsModal');
 const closeSettingsBtn = document.getElementById('closeSettingsBtn');
 const settingsWindow = settingsModal ? settingsModal.querySelector('.settings-window') : null;
+const launcherVersionEl = document.getElementById('launcherVersion');
 
 let microsoftConnected = false;
 const RAM_STORAGE_KEY = 'launcher.memoryMb';
@@ -991,6 +992,23 @@ const loadVersions = async (preferredVersionOverride) => {
   statusEl.textContent = 'Liste des versions indisponible, version locale utilisée.';
 };
 
+const loadLauncherVersion = async () => {
+  if (!launcherVersionEl) {
+    return;
+  }
+
+  try {
+    const result = await window.mcLauncher.getAppVersion();
+    if (result && result.ok && result.version) {
+      launcherVersionEl.textContent = `v${result.version}`;
+      return;
+    }
+  } catch {
+  }
+
+  launcherVersionEl.textContent = 'v?';
+};
+
 restoreRamPreference();
 restoreConsolePreference();
 restoreCloseLauncherPreference();
@@ -998,6 +1016,7 @@ restoreSnapshotPreference();
 setProgress(0, 'Progression: 0%');
 
 const initializeRenderer = async () => {
+  await loadLauncherVersion();
   await loadProfiles();
   await loadVersions();
   await applyStoredProfileVersion(getActiveProfile());

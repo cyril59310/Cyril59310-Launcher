@@ -2,6 +2,7 @@ const { contextBridge, ipcRenderer } = require('electron');
 
 contextBridge.exposeInMainWorld('mcLauncher', {
   start: (payload) => ipcRenderer.invoke('launcher:start', payload),
+  getAppVersion: () => ipcRenderer.invoke('launcher:app-version'),
   getVersions: (options) => ipcRenderer.invoke('launcher:versions', options),
   openGameFolder: (targetPath) => ipcRenderer.invoke('launcher:open-game-folder', targetPath),
   listProfiles: () => ipcRenderer.invoke('profiles:list'),
