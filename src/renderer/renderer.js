@@ -9,6 +9,18 @@ const memoryEl = document.getElementById('memoryMb');
 const disableGameConsoleEl = document.getElementById('disableGameConsole');
 const closeLauncherOnStartEl = document.getElementById('closeLauncherOnStart');
 const includeSnapshotsEl = document.getElementById('includeSnapshots');
+const profileSelectEl = document.getElementById('profileSelect');
+const profileNameEl = document.getElementById('profileName');
+const profileGameDirectoryEl = document.getElementById('profileGameDirectory');
+const activeProfileLabelEl = document.getElementById('activeProfileLabel');
+const openProfileSettingsBtn = document.getElementById('openProfileSettingsBtn');
+const profileSettingsModal = document.getElementById('profileSettingsModal');
+const closeProfileSettingsBtn = document.getElementById('closeProfileSettingsBtn');
+const profileSettingsWindow = profileSettingsModal ? profileSettingsModal.querySelector('.profile-settings-window') : null;
+const browseProfileFolderBtn = document.getElementById('browseProfileFolderBtn');
+const newProfileBtn = document.getElementById('newProfileBtn');
+const saveProfileBtn = document.getElementById('saveProfileBtn');
+const deleteProfileBtn = document.getElementById('deleteProfileBtn');
 const msLoginBtn = document.getElementById('msLoginBtn');
 const msLogoutBtn = document.getElementById('msLogoutBtn');
 const msStatusEl = document.getElementById('msStatus');
@@ -37,6 +49,8 @@ let updateReady = false;
 let knownAccounts = [];
 let knownActiveAccountId = null;
 let knownProfile = null;
+let knownProfiles = [];
+let activeProfileId = null;
 
 const normalizeUuid = (value) => {
   if (typeof value !== 'string') {
@@ -113,6 +127,113 @@ const setProgress = (percent, label) => {
 const appendLog = (line) => {
   logsEl.textContent += `${line}\n`;
   logsEl.scrollTop = logsEl.scrollHeight;
+};
+
+const getActiveProfile = () => {
+  const selectedId = profileSelectEl && profileSelectEl.value
+    ? profileSelectEl.value
+    : activeProfileId;
+  return knownProfiles.find((entry) => entry && entry.id === selectedId) || null;
+};
+
+const renderProfiles = (profiles, activeId) => {
+  knownProfiles = Array.isArray(profiles) ? profiles : [];
+  activeProfileId = activeId || null;
+
+  if (!profileSelectEl) {
+    return;
+  }
+
+  profileSelectEl.innerHTML = '';
+
+  if (!knownProfiles.length) {
+    const fallback = document.createElement('option');
+    fallback.value = '';
+    fallback.textContent = 'Aucun profil';
+    profileSelectEl.appendChild(fallback);
+    profileSelectEl.disabled = true;
+    if (deleteProfileBtn) {
+      deleteProfileBtn.disabled = true;
+    }
+    return;
+  }
+
+  knownProfiles.forEach((profile) => {
+    const option = document.createElement('option');
+    option.value = profile.id;
+    option.textContent = profile.name || 'Profil';
+    profileSelectEl.appendChild(option);
+  });
+
+  const hasActive = knownProfiles.some((entry) => entry.id === activeProfileId);
+  profileSelectEl.value = hasActive ? activeProfileId : knownProfiles[0].id;
+  activeProfileId = profileSelectEl.value;
+  profileSelectEl.disabled = false;
+
+  if (deleteProfileBtn) {
+    deleteProfileBtn.disabled = knownProfiles.length <= 1;
+  }
+};
+
+const applyActiveProfileToForm = () => {
+  const profile = getActiveProfile();
+
+  if (!profile) {
+    if (profileNameEl) {
+      profileNameEl.value = '';
+    }
+    if (profileGameDirectoryEl) {
+      profileGameDirectoryEl.value = '';
+    }
+    if (activeProfileLabelEl) {
+      activeProfileLabelEl.textContent = 'Aucun profil';
+    }
+    return null;
+  }
+
+  if (profileNameEl) {
+    profileNameEl.value = profile.name || '';
+  }
+
+  if (profileGameDirectoryEl) {
+    profileGameDirectoryEl.value = profile.gameDirectory || '';
+  }
+
+  if (activeProfileLabelEl) {
+    activeProfileLabelEl.textContent = profile.name || 'Profil';
+  }
+
+  return profile;
+};
+
+const persistActiveProfile = async ({ showStatus = false } = {}) => {
+  const profile = getActiveProfile();
+  if (!profile) {
+    return false;
+  }
+
+  const payload = {
+    id: profile.id,
+    setActive: true,
+    name: profileNameEl ? profileNameEl.value : profile.name,
+    version: versionEl ? versionEl.value : profile.version,
+    gameDirectory: profileGameDirectoryEl ? profileGameDirectoryEl.value : profile.gameDirectory
+  };
+
+  const result = await window.mcLauncher.updateProfile(payload);
+  if (!result || !result.ok) {
+    if (showStatus) {
+      statusEl.textContent = result && result.message ? result.message : 'Impossible d\'enregistrer le profil.';
+    }
+    return false;
+  }
+
+  renderProfiles(result.profiles || [], result.activeProfileId || null);
+  applyActiveProfileToForm();
+  if (showStatus) {
+    statusEl.textContent = 'Profil mis a jour.';
+  }
+  return true;
 };
 
 const setMicrosoftConnected = (connected, profileName) => {
@@ -315,16 +436,47 @@ const setSettingsModalOpen = (open) => {
   settingsBtn.textContent = 'Parametres';
 };
 
+const setProfileSettingsModalOpen = (open) => {
+  if (!profileSettingsModal || !openProfileSettingsBtn) {
+    return;
+  }
+
+  if (open) {
+    profileSettingsModal.classList.add('is-open');
+    profileSettingsModal.setAttribute('aria-hidden', 'false');
+    openProfileSettingsBtn.setAttribute('aria-expanded', 'true');
+    return;
+  }
+
+  profileSettingsModal.classList.remove('is-open');
+  profileSettingsModal.setAttribute('aria-hidden', 'true');
+  openProfileSettingsBtn.setAttribute('aria-expanded', 'false');
+};
+
 setSettingsModalOpen(false);
+setProfileSettingsModalOpen(false);
 
 settingsBtn.addEventListener('click', () => {
   const isOpen = settingsModal.classList.contains('is-open');
   setSettingsModalOpen(!isOpen);
 });
 
+if (openProfileSettingsBtn) {
+  openProfileSettingsBtn.addEventListener('click', () => {
+    const isOpen = profileSettingsModal && profileSettingsModal.classList.contains('is-open');
+    setProfileSettingsModalOpen(!isOpen);
+  });
+}
+
 if (closeSettingsBtn) {
   closeSettingsBtn.addEventListener('click', () => {
     setSettingsModalOpen(false);
+  });
+}
+
+if (closeProfileSettingsBtn) {
+  closeProfileSettingsBtn.addEventListener('click', () => {
+    setProfileSettingsModalOpen(false);
   });
 }
 
@@ -334,8 +486,22 @@ settingsModal.addEventListener('click', (event) => {
   }
 });
 
+if (profileSettingsModal) {
+  profileSettingsModal.addEventListener('click', (event) => {
+    if (event.target === profileSettingsModal) {
+      setProfileSettingsModalOpen(false);
+    }
+  });
+}
+
 if (settingsWindow) {
   settingsWindow.addEventListener('click', (event) => {
+    event.stopPropagation();
+  });
+}
+
+if (profileSettingsWindow) {
+  profileSettingsWindow.addEventListener('click', (event) => {
     event.stopPropagation();
   });
 }
@@ -343,6 +509,11 @@ if (settingsWindow) {
 document.addEventListener('keydown', (event) => {
   if (event.key === 'Escape' && settingsModal.classList.contains('is-open')) {
     setSettingsModalOpen(false);
+    return;
+  }
+
+  if (event.key === 'Escape' && profileSettingsModal && profileSettingsModal.classList.contains('is-open')) {
+    setProfileSettingsModalOpen(false);
   }
 });
 
@@ -419,10 +590,99 @@ msAccountSelectEl.addEventListener('change', async () => {
   }
 });
 
+if (profileSelectEl) {
+  profileSelectEl.addEventListener('change', async () => {
+    const profileId = profileSelectEl.value;
+    if (!profileId) {
+      return;
+    }
+
+    const result = await window.mcLauncher.updateProfile({ id: profileId, setActive: true });
+    if (!result || !result.ok) {
+      statusEl.textContent = result && result.message ? result.message : 'Impossible de selectionner le profil.';
+      return;
+    }
+
+    renderProfiles(result.profiles || [], result.activeProfileId || null);
+    const profile = applyActiveProfileToForm();
+    statusEl.textContent = `Profil actif: ${profile?.name || 'Profil'}`;
+    void loadVersions((profile && profile.version) || localStorage.getItem(VERSION_STORAGE_KEY));
+  });
+}
+
+if (newProfileBtn) {
+  newProfileBtn.addEventListener('click', async () => {
+    const suggestedName = `Profil ${knownProfiles.length + 1}`;
+    const result = await window.mcLauncher.createProfile(suggestedName);
+    if (!result || !result.ok) {
+      statusEl.textContent = result && result.message ? result.message : 'Creation du profil impossible.';
+      return;
+    }
+
+    renderProfiles(result.profiles || [], result.activeProfileId || null);
+    const profile = applyActiveProfileToForm();
+    statusEl.textContent = `Profil cree: ${profile?.name || 'Nouveau profil'}`;
+    void loadVersions((profile && profile.version) || localStorage.getItem(VERSION_STORAGE_KEY));
+  });
+}
+
+if (saveProfileBtn) {
+  saveProfileBtn.addEventListener('click', async () => {
+    await persistActiveProfile({ showStatus: true });
+  });
+}
+
+if (deleteProfileBtn) {
+  deleteProfileBtn.addEventListener('click', async () => {
+    const profile = getActiveProfile();
+    if (!profile) {
+      return;
+    }
+
+    const shouldDelete = window.confirm(`Supprimer le profil "${profile.name}" ?`);
+    if (!shouldDelete) {
+      return;
+    }
+
+    const result = await window.mcLauncher.deleteProfile(profile.id);
+    if (!result || !result.ok) {
+      statusEl.textContent = result && result.message ? result.message : 'Suppression impossible.';
+      return;
+    }
+
+    renderProfiles(result.profiles || [], result.activeProfileId || null);
+    const updatedProfile = applyActiveProfileToForm();
+    statusEl.textContent = 'Profil supprime.';
+    void loadVersions((updatedProfile && updatedProfile.version) || localStorage.getItem(VERSION_STORAGE_KEY));
+  });
+}
+
+if (browseProfileFolderBtn) {
+  browseProfileFolderBtn.addEventListener('click', async () => {
+    const initialPath = profileGameDirectoryEl ? profileGameDirectoryEl.value : '';
+    const result = await window.mcLauncher.chooseProfileFolder(initialPath);
+    if (!result || result.canceled) {
+      return;
+    }
+
+    if (!result.ok || !result.path) {
+      statusEl.textContent = result && result.message ? result.message : 'Dossier invalide.';
+      return;
+    }
+
+    if (profileGameDirectoryEl) {
+      profileGameDirectoryEl.value = result.path;
+    }
+    await persistActiveProfile({ showStatus: true });
+  });
+}
+
 versionEl.addEventListener('change', () => {
   if (versionEl.value) {
     localStorage.setItem(VERSION_STORAGE_KEY, versionEl.value);
   }
+
+  void persistActiveProfile();
 });
 
 includeSnapshotsEl.addEventListener('change', () => {
@@ -440,7 +700,8 @@ launchForm.addEventListener('submit', async (event) => {
     memoryMb: Number(formData.get('memoryMb') || 2048),
     disableGameConsole: disableGameConsoleEl.checked,
     closeLauncherOnStart: closeLauncherOnStartEl.checked,
-    accountId: msAccountSelectEl.value || null
+    accountId: msAccountSelectEl.value || null,
+    gameDirectory: profileGameDirectoryEl ? profileGameDirectoryEl.value : null
   };
 
   localStorage.setItem(RAM_STORAGE_KEY, String(payload.memoryMb));
@@ -476,7 +737,8 @@ openGameFolderBtn.addEventListener('click', async () => {
   openGameFolderBtn.disabled = true;
 
   try {
-    const result = await window.mcLauncher.openGameFolder();
+    const targetPath = profileGameDirectoryEl ? profileGameDirectoryEl.value : null;
+    const result = await window.mcLauncher.openGameFolder(targetPath);
     if (result.ok) {
       statusEl.textContent = 'Dossier du jeu ouvert.';
       appendLog(`[launcher] Dossier ouvert: ${result.path}`);
@@ -537,6 +799,22 @@ const restoreCloseLauncherPreference = () => {
 const restoreSnapshotPreference = () => {
   const saved = localStorage.getItem(SNAPSHOTS_STORAGE_KEY);
   includeSnapshotsEl.checked = saved === '1';
+};
+
+const loadProfiles = async () => {
+  try {
+    const result = await window.mcLauncher.listProfiles();
+    if (!result || !result.ok) {
+      statusEl.textContent = result && result.message ? result.message : 'Chargement des profils impossible.';
+      return null;
+    }
+
+    renderProfiles(result.profiles || [], result.activeProfileId || null);
+    return applyActiveProfileToForm();
+  } catch {
+    statusEl.textContent = 'Chargement des profils impossible.';
+    return null;
+  }
 };
 
 const renderVersionOptions = (versions, selectedVersion) => {
@@ -606,5 +884,12 @@ restoreConsolePreference();
 restoreCloseLauncherPreference();
 restoreSnapshotPreference();
 setProgress(0, 'Progression: 0%');
-void loadVersions();
-void tryRestoreMicrosoftSession();
+
+const initializeRenderer = async () => {
+  const activeProfile = await loadProfiles();
+  const preferredVersion = (activeProfile && activeProfile.version) || undefined;
+  await loadVersions(preferredVersion);
+  await tryRestoreMicrosoftSession();
+};
+
+void initializeRenderer();

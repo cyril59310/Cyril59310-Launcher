@@ -206,12 +206,14 @@ label {
 }
 
 select,
+input,
 button,
 input[type="checkbox"] {
   font: inherit;
 }
 
-select {
+select,
+input[type="text"] {
   width: 100%;
   height: 42px;
   border-radius: 11px;
@@ -222,9 +224,49 @@ select {
   outline: none;
 }
 
-select:focus {
+select:focus,
+input[type="text"]:focus {
   border-color: var(--accent);
   box-shadow: 0 0 0 3px var(--accent-soft);
+}
+
+input[type="text"][readonly] {
+  opacity: 0.95;
+}
+
+.profiles-block {
+  display: grid;
+  gap: 10px;
+}
+
+.profile-summary-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 12px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid rgba(158, 186, 196, 0.22);
+}
+
+.profile-summary-text {
+  color: var(--muted);
+  font-size: 0.95rem;
+}
+
+.profile-summary-text strong {
+  color: var(--text);
+}
+
+.inline-field-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+}
+
+.compact-actions {
+  margin-top: 10px;
 }
 
 .field-grid {
@@ -367,6 +409,10 @@ button:disabled {
   padding: 16px;
 }
 
+.profile-settings-window {
+  width: min(760px, 100%);
+}
+
 .settings-header {
   display: flex;
   align-items: center;
@@ -444,6 +490,15 @@ button:disabled {
   }
 
   .row-actions button {
+    width: 100%;
+  }
+
+  .profile-summary-row {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .profile-summary-row button {
     width: 100%;
   }
 

@@ -2,7 +2,7 @@ const path = require('path');
 const fs = require('fs');
 const https = require('https');
 const { spawn } = require('child_process');
-const { app, BrowserWindow, ipcMain, shell } = require('electron');
+const { app, BrowserWindow, ipcMain, shell, dialog } = require('electron');
 const { autoUpdater } = require('electron-updater');
 const { Client } = require('minecraft-launcher-core');
 const { Auth } = require('msmc');
@@ -17,6 +17,7 @@ let updaterConfigured = false;
 
 const launcherRoot = () => path.join(app.getPath('appData'), '.Cyril59310-Launcher');
 const authStorePath = () => path.join(launcherRoot(), 'auth.json');
+const profilesStorePath = () => path.join(launcherRoot(), 'profiles.json');
 const runtimesRoot = () => path.join(launcherRoot(), 'runtime');
 const VERSION_MANIFEST_URL = 'https://launchermeta.mojang.com/mc/game/version_manifest_v2.json';
 const JAVA_API_BASE = 'https://api.adoptium.net/v3/binary/latest';
@@ -35,6 +36,117 @@ function createDefaultAuthStore() {
 
 function ensureLauncherRoot() {
   fs.mkdirSync(launcherRoot(), { recursive: true });
+}
+
+function defaultInstancesRoot() {
+  return path.join(launcherRoot(), 'instances');
+}
+
+function defaultGameDirectory() {
+  return path.join(defaultInstancesRoot(), 'default');
+}
+
+function createProfileId() {
+  return `profile-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`;
+}
+
+function sanitizeProfileName(name) {
+  const raw = typeof name === 'string' ? name.trim() : '';
+  if (!raw) {
+    return 'Nouveau profil';
+  }
+
+  return raw.slice(0, 48);
+}
+
+function normalizeGameDirectoryPath(value) {
+  const raw = typeof value === 'string' ? value.trim() : '';
+  if (!raw) {
+    return '';
+  }
+
+  return path.normalize(path.resolve(raw));
+}
+
+function createDefaultProfilesStore() {
+  return {
+    activeProfileId: 'default',
+    profiles: [{
+      id: 'default',
+      name: 'Profil par défaut',
+      version: '',
+      gameDirectory: defaultGameDirectory()
+    }]
+  };
+}
+
+function normalizeProfilesStore(store) {
+  const fallback = createDefaultProfilesStore();
+
+  const profiles = Array.isArray(store && store.profiles)
+    ? store.profiles
+      .filter((entry) => entry && typeof entry.id === 'string' && entry.id.trim())
+      .map((entry) => ({
+        id: String(entry.id).trim(),
+        name: sanitizeProfileName(entry.name),
+        version: typeof entry.version === 'string' ? entry.version.trim() : '',
+        gameDirectory: normalizeGameDirectoryPath(entry.gameDirectory) || defaultGameDirectory()
+      }))
+    : [];
+
+  const safeProfiles = profiles.length ? profiles : fallback.profiles;
+  const hasActive = safeProfiles.some((entry) => entry.id === store?.activeProfileId);
+
+  return {
+    activeProfileId: hasActive ? store.activeProfileId : safeProfiles[0].id,
+    profiles: safeProfiles
+  };
+}
+
+function readProfilesStore() {
+  try {
+    if (!fs.existsSync(profilesStorePath())) {
+      return createDefaultProfilesStore();
+    }
+
+    const raw = fs.readFileSync(profilesStorePath(), 'utf-8');
+    const parsed = JSON.parse(raw);
+    return normalizeProfilesStore(parsed);
+  } catch {
+    return createDefaultProfilesStore();
+  }
+}
+
+function writeProfilesStore(store) {
+  ensureLauncherRoot();
+  const normalized = normalizeProfilesStore(store);
+  fs.writeFileSync(profilesStorePath(), JSON.stringify(normalized, null, 2), 'utf-8');
+}
+
+function ensureProfileDirectory(gameDirectory) {
+  if (!gameDirectory) {
+    return;
+  }
+
+  fs.mkdirSync(gameDirectory, { recursive: true });
+}
+
+function publicProfiles(store) {
+  return store.profiles.map((entry) => ({
+    id: entry.id,
+    name: entry.name,
+    version: entry.version,
+    gameDirectory: entry.gameDirectory
+  }));
+}
+
+function profilesResponse(store, ok = true, message = 'OK') {
+  return {
+    ok,
+    message,
+    activeProfileId: store.activeProfileId,
+    profiles: publicProfiles(store)
+  };
 }
 
 function ensureRuntimesRoot() {
@@ -822,7 +934,8 @@ ipcMain.handle('launcher:start', async (_, payload) => {
     memoryMb,
     disableGameConsole,
     closeLauncherOnStart,
-    accountId
+    accountId,
+    gameDirectory
   } = payload;
 
   if (!version) {
@@ -854,7 +967,9 @@ ipcMain.handle('launcher:start', async (_, payload) => {
   }
 
   const launcher = new Client();
-  const minecraftDirectory = launcherRoot();
+  const requestedGameDirectory = normalizeGameDirectoryPath(gameDirectory);
+  const minecraftDirectory = requestedGameDirectory || launcherRoot();
+  ensureProfileDirectory(minecraftDirectory);
   const authorization = normalizeAuthorizationForLaunch(microsoftAuth);
   const trimmedVersion = version.trim();
 
@@ -968,10 +1083,16 @@ ipcMain.handle('launcher:versions', async (_, options) => {
   }
 });
 
-ipcMain.handle('launcher:open-game-folder', async () => {
+ipcMain.handle('launcher:open-game-folder', async (_, targetPathArg) => {
   try {
-    ensureLauncherRoot();
-    const targetPath = launcherRoot();
+    const store = readProfilesStore();
+    const activeProfile = store.profiles.find((entry) => entry.id === store.activeProfileId) || null;
+    const fallbackPath = activeProfile && activeProfile.gameDirectory
+      ? activeProfile.gameDirectory
+      : launcherRoot();
+    const argTargetPath = normalizeGameDirectoryPath(targetPathArg);
+    const targetPath = argTargetPath || fallbackPath;
+    ensureProfileDirectory(targetPath);
     const errorMessage = await shell.openPath(targetPath);
 
     if (errorMessage) {
@@ -991,6 +1112,113 @@ ipcMain.handle('launcher:open-game-folder', async () => {
     const message = error && error.message ? error.message : String(error);
     return { ok: false, message: `Erreur ouverture dossier: ${message}`, path: launcherRoot() };
   }
+});
+
+ipcMain.handle('profiles:list', async () => {
+  const store = readProfilesStore();
+  writeProfilesStore(store);
+  return profilesResponse(store, true, 'Profils charges.');
+});
+
+ipcMain.handle('profiles:create', async (_, requestedName) => {
+  const store = readProfilesStore();
+  const id = createProfileId();
+  const profilesCount = store.profiles.length + 1;
+  const profileName = sanitizeProfileName(requestedName || `Profil ${profilesCount}`);
+  const gameDirectory = path.join(defaultInstancesRoot(), id);
+
+  const profile = {
+    id,
+    name: profileName,
+    version: '',
+    gameDirectory
+  };
+
+  store.profiles.push(profile);
+  store.activeProfileId = profile.id;
+  ensureProfileDirectory(gameDirectory);
+  writeProfilesStore(store);
+  return profilesResponse(store, true, 'Profil cree.');
+});
+
+ipcMain.handle('profiles:update', async (_, payload) => {
+  const store = readProfilesStore();
+  const profileId = typeof payload?.id === 'string' ? payload.id : null;
+  if (!profileId) {
+    return profilesResponse(store, false, 'Profil invalide.');
+  }
+
+  const profile = store.profiles.find((entry) => entry.id === profileId);
+  if (!profile) {
+    return profilesResponse(store, false, 'Profil introuvable.');
+  }
+
+  if (typeof payload?.name === 'string') {
+    profile.name = sanitizeProfileName(payload.name);
+  }
+
+  if (typeof payload?.version === 'string') {
+    profile.version = payload.version.trim();
+  }
+
+  if (typeof payload?.gameDirectory === 'string') {
+    const normalizedDirectory = normalizeGameDirectoryPath(payload.gameDirectory);
+    if (!normalizedDirectory) {
+      return profilesResponse(store, false, 'Dossier de jeu invalide.');
+    }
+
+    profile.gameDirectory = normalizedDirectory;
+    ensureProfileDirectory(normalizedDirectory);
+  }
+
+  if (typeof payload?.setActive === 'boolean' && payload.setActive) {
+    store.activeProfileId = profile.id;
+  }
+
+  writeProfilesStore(store);
+  return profilesResponse(store, true, 'Profil mis a jour.');
+});
+
+ipcMain.handle('profiles:delete', async (_, profileId) => {
+  const store = readProfilesStore();
+  if (store.profiles.length <= 1) {
+    return profilesResponse(store, false, 'Impossible de supprimer le dernier profil.');
+  }
+
+  const targetId = typeof profileId === 'string' ? profileId : '';
+  const filtered = store.profiles.filter((entry) => entry.id !== targetId);
+  if (filtered.length === store.profiles.length) {
+    return profilesResponse(store, false, 'Profil introuvable.');
+  }
+
+  store.profiles = filtered;
+  if (!store.profiles.some((entry) => entry.id === store.activeProfileId)) {
+    store.activeProfileId = store.profiles[0].id;
+  }
+
+  writeProfilesStore(store);
+  return profilesResponse(store, true, 'Profil supprime.');
+});
+
+ipcMain.handle('profiles:choose-folder', async (_, initialPath) => {
+  const defaultPath = normalizeGameDirectoryPath(initialPath) || launcherRoot();
+
+  const result = await dialog.showOpenDialog(mainWindow, {
+    title: 'Choisir le dossier du profil',
+    properties: ['openDirectory', 'createDirectory', 'promptToCreate'],
+    defaultPath
+  });
+
+  if (result.canceled || !Array.isArray(result.filePaths) || !result.filePaths[0]) {
+    return { ok: false, canceled: true, path: defaultPath };
+  }
+
+  const selectedPath = normalizeGameDirectoryPath(result.filePaths[0]);
+  if (!selectedPath) {
+    return { ok: false, canceled: false, message: 'Dossier invalide.', path: defaultPath };
+  }
+
+  return { ok: true, canceled: false, path: selectedPath };
 });
 
 ipcMain.handle('updater:check', async () => {

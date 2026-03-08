@@ -68,6 +68,11 @@
             <h2>Configuration de lancement</h2>
           </div>
 
+          <div class="profile-summary-row">
+            <div class="profile-summary-text">Profil actif: <strong id="activeProfileLabel">Chargement...</strong></div>
+            <button id="openProfileSettingsBtn" type="button" class="secondary">Parametres profils</button>
+          </div>
+
           <div class="field-grid">
             <div>
               <label for="version">Version</label>
@@ -127,6 +132,43 @@
         <input id="closeLauncherOnStart" name="closeLauncherOnStart" type="checkbox" />
         Fermer le launcher au lancement du jeu
       </label>
+    </section>
+  </div>
+
+  <div id="profileSettingsModal" class="settings-modal" aria-hidden="true">
+    <section class="settings-window profile-settings-window" role="dialog" aria-modal="true" aria-labelledby="profileSettingsTitle">
+      <div class="settings-header">
+        <h2 id="profileSettingsTitle" class="settings-title">Parametres des profils</h2>
+        <button id="closeProfileSettingsBtn" type="button" class="secondary" aria-label="Fermer les parametres de profils">Fermer</button>
+      </div>
+
+      <div class="profiles-block">
+        <div>
+          <label for="profileSelect">Profil</label>
+          <select id="profileSelect" name="profileSelect" aria-label="Profil de jeu">
+            <option value="">Chargement des profils...</option>
+          </select>
+        </div>
+
+        <div>
+          <label for="profileName">Nom du profil</label>
+          <input id="profileName" name="profileName" type="text" maxlength="48" placeholder="Nom du profil" />
+        </div>
+
+        <div>
+          <label for="profileGameDirectory">Dossier du jeu</label>
+          <div class="inline-field-row">
+            <input id="profileGameDirectory" name="profileGameDirectory" type="text" readonly />
+            <button id="browseProfileFolderBtn" type="button" class="secondary">Parcourir</button>
+          </div>
+        </div>
+
+        <div class="row-actions compact-actions">
+          <button id="newProfileBtn" type="button" class="secondary">Nouveau</button>
+          <button id="saveProfileBtn" type="button" class="secondary">Enregistrer profil</button>
+          <button id="deleteProfileBtn" type="button" class="secondary">Supprimer profil</button>
+        </div>
+      </div>
     </section>
   </div>
 
