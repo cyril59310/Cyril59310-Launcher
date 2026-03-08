@@ -1,6 +1,6 @@
 {
   "name": "cyril59310-launcher",
-  "version": "1.5.0",
+  "version": "1.5.1",
   "description": "Launcher Minecraft proposé par Cyril59310",
   "main": "src/main.js",
   "scripts": {
