@@ -575,17 +575,17 @@ function setupAutoUpdater() {
 
   autoUpdater.on('checking-for-update', () => {
     sendUpdateEvent('checking');
-    sendLog('[update] Verification des mises a jour...');
+    sendLog('[update] Vérification des mises à jour...');
   });
 
   autoUpdater.on('update-available', (info) => {
     sendUpdateEvent('available', { version: info && info.version ? String(info.version) : null });
-    sendLog(`[update] Mise a jour disponible${info && info.version ? `: ${info.version}` : ''}. Telechargement...`);
+    sendLog(`[update] Mise à jour disponible${info && info.version ? `: ${info.version}` : ''}. Téléchargement...`);
   });
 
   autoUpdater.on('update-not-available', () => {
     sendUpdateEvent('none');
-    sendLog('[update] Aucune mise a jour disponible.');
+    sendLog('[update] Aucune mise à jour disponible.');
   });
 
   autoUpdater.on('download-progress', (progress) => {
@@ -596,31 +596,31 @@ function setupAutoUpdater() {
 
   autoUpdater.on('update-downloaded', (info) => {
     sendUpdateEvent('downloaded', { version: info && info.version ? String(info.version) : null });
-    sendLog('[update] Mise a jour telechargee. Clique sur "Installer la mise a jour" pour redemarrer.');
+    sendLog('[update] Mise à jour téléchargée. Clique sur "Installer la mise à jour" pour redémarrer.');
   });
 
   autoUpdater.on('error', (error) => {
     const message = error && error.message ? error.message : String(error);
     sendUpdateEvent('error', { message });
-    sendLog(`[update] Erreur mise a jour: ${message}`);
+    sendLog(`[update] Erreur mise à jour: ${message}`);
   });
 }
 
 async function checkForLauncherUpdates(isManual = false) {
   if (!app.isPackaged) {
-    return { ok: false, message: 'Mise a jour indisponible en mode developpement.' };
+    return { ok: false, message: 'Mise à jour indisponible en mode développement.' };
   }
 
   if (isPortablePackage()) {
-    return { ok: false, message: 'Mise a jour automatique indisponible pour la version portable.' };
+    return { ok: false, message: 'Mise à jour automatique indisponible pour la version portable.' };
   }
 
   try {
     await autoUpdater.checkForUpdates();
-    return { ok: true, message: isManual ? 'Verification des mises a jour lancee.' : 'OK' };
+    return { ok: true, message: isManual ? 'Vérification des mises à jour lancée.' : 'OK' };
   } catch (error) {
     const message = error && error.message ? error.message : String(error);
-    return { ok: false, message: `Verification impossible: ${message}` };
+    return { ok: false, message: `Vérification impossible: ${message}` };
   }
 }
 
@@ -795,7 +795,7 @@ async function activateAccount(accountId) {
 
   const currentRefreshToken = await readRefreshTokenSecure(account.id);
   if (!currentRefreshToken) {
-    throw new Error('Token Microsoft introuvable dans le coffre systeme. Reconnecte ton compte.');
+    throw new Error('Token Microsoft introuvable dans le coffre système. Reconnecte ton compte.');
   }
 
   const refreshed = await refreshAccountFromToken(currentRefreshToken);
@@ -924,8 +924,8 @@ app.whenReady().then(() => {
   } else {
     sendUpdateEvent('disabled', {
       message: app.isPackaged
-        ? 'Mise a jour auto indisponible pour la version portable.'
-        : 'Mise a jour auto indisponible en developpement.'
+        ? 'Mise à jour auto indisponible pour la version portable.'
+        : 'Mise à jour auto indisponible en développement.'
     });
   }
 
@@ -1169,7 +1169,7 @@ ipcMain.handle('launcher:open-external-link', async (_, rawUrl) => {
 ipcMain.handle('profiles:list', async () => {
   const store = readProfilesStore();
   writeProfilesStore(store);
-  return profilesResponse(store, true, 'Profils charges.');
+  return profilesResponse(store, true, 'Profils chargés.');
 });
 
 ipcMain.handle('profiles:create', async (_, requestedName) => {
@@ -1190,7 +1190,7 @@ ipcMain.handle('profiles:create', async (_, requestedName) => {
   store.activeProfileId = profile.id;
   ensureProfileDirectory(gameDirectory);
   writeProfilesStore(store);
-  return profilesResponse(store, true, 'Profil cree.');
+  return profilesResponse(store, true, 'Profil créé.');
 });
 
 ipcMain.handle('profiles:update', async (_, payload) => {
@@ -1228,7 +1228,7 @@ ipcMain.handle('profiles:update', async (_, payload) => {
   }
 
   writeProfilesStore(store);
-  return profilesResponse(store, true, 'Profil mis a jour.');
+  return profilesResponse(store, true, 'Profil mis à jour.');
 });
 
 ipcMain.handle('profiles:delete', async (_, payload) => {
@@ -1252,7 +1252,7 @@ ipcMain.handle('profiles:delete', async (_, payload) => {
   if (deleteGameDirectory) {
     const targetDirectory = normalizeGameDirectoryPath(targetProfile.gameDirectory);
     if (!targetDirectory || isDangerousDeletePath(targetDirectory)) {
-      return profilesResponse(store, false, 'Suppression du dossier refusee (chemin protege).');
+      return profilesResponse(store, false, 'Suppression du dossier refusée (chemin protégé).');
     }
 
     try {
@@ -1273,7 +1273,7 @@ ipcMain.handle('profiles:delete', async (_, payload) => {
   }
 
   writeProfilesStore(store);
-  return profilesResponse(store, true, deleteGameDirectory ? 'Profil et dossier supprimes.' : 'Profil supprime.');
+  return profilesResponse(store, true, deleteGameDirectory ? 'Profil et dossier supprimés.' : 'Profil supprimé.');
 });
 
 ipcMain.handle('profiles:choose-folder', async (_, initialPath) => {
@@ -1303,7 +1303,7 @@ ipcMain.handle('updater:check', async () => {
 
 ipcMain.handle('updater:install', async () => {
   if (!app.isPackaged) {
-    return { ok: false, message: 'Installation de mise a jour indisponible en developpement.' };
+    return { ok: false, message: 'Installation de mise à jour indisponible en développement.' };
   }
 
   if (isPortablePackage()) {
@@ -1314,7 +1314,7 @@ ipcMain.handle('updater:install', async () => {
     autoUpdater.quitAndInstall(true, true);
   });
 
-  return { ok: true, message: 'Redemarrage pour appliquer la mise a jour...' };
+  return { ok: true, message: 'Redémarrage pour appliquer la mise à jour...' };
 });
 
 ipcMain.handle('auth:microsoft-login', async () => {

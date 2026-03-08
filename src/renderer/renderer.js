@@ -87,7 +87,7 @@ const hideAccountIdentity = () => {
   accountIdentityEl.classList.add('is-offline');
   playerNameEl.textContent = 'Aucun compte';
   playerHeadEl.src = 'assets/logo.png';
-  playerHeadEl.alt = 'Tete du joueur';
+  playerHeadEl.alt = 'Tête du joueur';
 };
 
 const renderAccountIdentity = () => {
@@ -107,7 +107,7 @@ const renderAccountIdentity = () => {
 
   accountIdentityEl.classList.remove('is-offline');
   playerNameEl.textContent = displayName;
-  playerHeadEl.alt = `Tete de ${displayName}`;
+  playerHeadEl.alt = `Tête de ${displayName}`;
   playerHeadEl.dataset.fallback = '0';
   playerHeadEl.src = buildPlayerHeadUrl(playerUuid, displayName);
 };
@@ -290,9 +290,9 @@ const persistActiveProfile = async ({ showStatus = false } = {}) => {
   renderProfiles(result.profiles || [], result.activeProfileId || null);
   applyActiveProfileToForm();
   if (showStatus) {
-    statusEl.textContent = 'Profil mis a jour.';
+    statusEl.textContent = 'Profil mis à jour.';
   }
-  setProfileNotice('Profil enregistre avec succes.', 'success');
+  setProfileNotice('Profil enregistré avec succès.', 'success');
   return true;
 };
 
@@ -392,40 +392,40 @@ window.mcLauncher.onUpdate((event) => {
   const type = event && event.type ? event.type : 'unknown';
 
   if (type === 'checking') {
-    updateStatusEl.textContent = 'Verification en cours...';
+    updateStatusEl.textContent = 'Vérification en cours...';
     return;
   }
 
   if (type === 'available') {
     const version = event && event.version ? event.version : 'nouvelle version';
-    updateStatusEl.textContent = `Mise a jour disponible (${version}), telechargement...`;
-    appendLog(`[update] Mise a jour detectee: ${version}`);
+    updateStatusEl.textContent = `Mise à jour disponible (${version}), téléchargement...`;
+    appendLog(`[update] Mise à jour détectée: ${version}`);
     return;
   }
 
   if (type === 'download-progress') {
     const percent = Math.max(0, Math.min(100, Number(event && event.percent ? event.percent : 0)));
-    updateStatusEl.textContent = `Telechargement mise a jour: ${Math.round(percent)}%`;
+    updateStatusEl.textContent = `Téléchargement mise à jour: ${Math.round(percent)}%`;
     return;
   }
 
   if (type === 'downloaded') {
     updateReady = true;
     const version = event && event.version ? event.version : 'nouvelle version';
-    updateStatusEl.textContent = `Pret a installer (${version})`;
+    updateStatusEl.textContent = `Prêt à installer (${version})`;
     installUpdateBtn.hidden = false;
-    appendLog('[update] Mise a jour telechargee et prete a etre installee.');
+    appendLog('[update] Mise à jour téléchargée et prête à être installée.');
     return;
   }
 
   if (type === 'none') {
-    updateStatusEl.textContent = 'Launcher a jour';
-    appendLog('[update] Aucune mise a jour disponible.');
+    updateStatusEl.textContent = 'Launcher à jour';
+    appendLog('[update] Aucune mise à jour disponible.');
     return;
   }
 
   if (type === 'disabled') {
-    updateStatusEl.textContent = event && event.message ? event.message : 'Mise a jour auto indisponible.';
+    updateStatusEl.textContent = event && event.message ? event.message : 'Mise à jour auto indisponible.';
     appendLog(`[update] ${updateStatusEl.textContent}`);
     return;
   }
@@ -443,10 +443,10 @@ checkUpdateBtn.addEventListener('click', async () => {
   try {
     const result = await window.mcLauncher.checkForUpdates();
     if (!result.ok) {
-      updateStatusEl.textContent = result.message || 'Verification impossible.';
-      appendLog(`[update] ${result.message || 'Verification impossible.'}`);
+      updateStatusEl.textContent = result.message || 'Vérification impossible.';
+      appendLog(`[update] ${result.message || 'Vérification impossible.'}`);
     } else {
-      updateStatusEl.textContent = 'Verification lancee...';
+      updateStatusEl.textContent = 'Vérification lancée...';
     }
   } catch (error) {
     const message = error && error.message ? error.message : String(error);
@@ -466,7 +466,7 @@ installUpdateBtn.addEventListener('click', async () => {
 
   try {
     const result = await window.mcLauncher.installUpdateNow();
-    updateStatusEl.textContent = result.message || 'Installation de la mise a jour...';
+    updateStatusEl.textContent = result.message || 'Installation de la mise à jour...';
   } catch (error) {
     const message = error && error.message ? error.message : String(error);
     updateStatusEl.textContent = `Erreur update: ${message}`;
@@ -485,7 +485,7 @@ const setSettingsModalOpen = (open) => {
     settingsModal.setAttribute('aria-hidden', 'false');
     settingsBtn.setAttribute('aria-expanded', 'true');
     settingsBtn.classList.add('is-open');
-    settingsBtn.textContent = 'Parametres';
+    settingsBtn.textContent = 'Paramètres';
     return;
   }
 
@@ -493,7 +493,7 @@ const setSettingsModalOpen = (open) => {
   settingsModal.setAttribute('aria-hidden', 'true');
   settingsBtn.setAttribute('aria-expanded', 'false');
   settingsBtn.classList.remove('is-open');
-  settingsBtn.textContent = 'Parametres';
+  settingsBtn.textContent = 'Paramètres';
 };
 
 const setProfileSettingsModalOpen = (open) => {
@@ -673,8 +673,8 @@ if (profileSelectEl) {
 
     const result = await window.mcLauncher.updateProfile({ id: profileId, setActive: true });
     if (!result || !result.ok) {
-      statusEl.textContent = result && result.message ? result.message : 'Impossible de selectionner le profil.';
-      setProfileNotice(result && result.message ? result.message : 'Impossible de selectionner le profil.', 'error');
+      statusEl.textContent = result && result.message ? result.message : 'Impossible de sélectionner le profil.';
+      setProfileNotice(result && result.message ? result.message : 'Impossible de sélectionner le profil.', 'error');
       return;
     }
 
@@ -691,15 +691,15 @@ if (newProfileBtn) {
     const suggestedName = `Profil ${knownProfiles.length + 1}`;
     const result = await window.mcLauncher.createProfile(suggestedName);
     if (!result || !result.ok) {
-      statusEl.textContent = result && result.message ? result.message : 'Creation du profil impossible.';
-      setProfileNotice(result && result.message ? result.message : 'Creation du profil impossible.', 'error');
+      statusEl.textContent = result && result.message ? result.message : 'Création du profil impossible.';
+      setProfileNotice(result && result.message ? result.message : 'Création du profil impossible.', 'error');
       return;
     }
 
     renderProfiles(result.profiles || [], result.activeProfileId || null);
     const profile = applyActiveProfileToForm();
-    statusEl.textContent = `Profil cree: ${profile?.name || 'Nouveau profil'}`;
-    setProfileNotice(`Profil cree: ${profile?.name || 'Nouveau profil'}`, 'success');
+    statusEl.textContent = `Profil créé: ${profile?.name || 'Nouveau profil'}`;
+    setProfileNotice(`Profil créé: ${profile?.name || 'Nouveau profil'}`, 'success');
     await applyStoredProfileVersion(profile);
   });
 }
@@ -738,9 +738,9 @@ if (deleteProfileBtn) {
 
     renderProfiles(result.profiles || [], result.activeProfileId || null);
     const updatedProfile = applyActiveProfileToForm();
-    statusEl.textContent = 'Profil supprime.';
+    statusEl.textContent = 'Profil supprimé.';
     setProfileNotice(
-      shouldDeleteDirectory ? 'Profil et dossier supprimes.' : 'Profil supprime (dossier conserve).',
+      shouldDeleteDirectory ? 'Profil et dossier supprimés.' : 'Profil supprimé (dossier conservé).',
       'success'
     );
     if (updatedProfile) {
@@ -768,7 +768,7 @@ if (browseProfileFolderBtn) {
     if (profileGameDirectoryEl) {
       profileGameDirectoryEl.value = result.path;
     }
-    setProfileNotice('Dossier du profil modifie.', 'info', true);
+    setProfileNotice('Dossier du profil modifié.', 'info', true);
     await persistActiveProfile({ showStatus: true });
   });
 }
@@ -778,7 +778,7 @@ if (confirmProfileSettingsBtn) {
     confirmProfileSettingsBtn.disabled = true;
     const ok = await persistActiveProfile({ showStatus: true });
     if (ok) {
-      setProfileNotice('Profil confirme.', 'success');
+      setProfileNotice('Profil confirmé.', 'success');
       setProfileSettingsModalOpen(false);
     }
     confirmProfileSettingsBtn.disabled = false;
