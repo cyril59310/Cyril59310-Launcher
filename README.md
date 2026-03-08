@@ -6,7 +6,7 @@
 
 Launcher Minecraft Java Edition base sur Electron, avec connexion Microsoft et gestion de plusieurs comptes.
 
-<img width="1266" height="713" alt="image" src="https://github.com/user-attachments/assets/a44816b2-ede7-4a4f-8312-87149ea2f8b3" />
+<img width="1266" height="713" alt="image" src="https://github.com/user-attachments/assets/6b028927-6a54-4d0e-8bb6-71893eb4159a" />
 
 
 ## Fonctionnalites
