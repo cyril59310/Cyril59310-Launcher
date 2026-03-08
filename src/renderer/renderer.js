@@ -39,6 +39,7 @@ const settingsModal = document.getElementById('settingsModal');
 const closeSettingsBtn = document.getElementById('closeSettingsBtn');
 const settingsWindow = settingsModal ? settingsModal.querySelector('.settings-window') : null;
 const launcherVersionEl = document.getElementById('launcherVersion');
+const authorGithubLinkEl = document.getElementById('authorGithubLink');
 
 let microsoftConnected = false;
 const RAM_STORAGE_KEY = 'launcher.memoryMb';
@@ -533,6 +534,17 @@ if (openProfileSettingsBtn) {
 if (closeSettingsBtn) {
   closeSettingsBtn.addEventListener('click', () => {
     setSettingsModalOpen(false);
+  });
+}
+
+if (authorGithubLinkEl) {
+  authorGithubLinkEl.addEventListener('click', async (event) => {
+    event.preventDefault();
+
+    const result = await window.mcLauncher.openExternalLink(authorGithubLinkEl.href);
+    if (!result || !result.ok) {
+      statusEl.textContent = result && result.message ? result.message : 'Impossible d\'ouvrir le lien GitHub.';
+    }
   });
 }
 

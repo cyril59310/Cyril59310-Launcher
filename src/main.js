@@ -1140,6 +1140,32 @@ ipcMain.handle('launcher:open-game-folder', async (_, targetPathArg) => {
   }
 });
 
+ipcMain.handle('launcher:open-external-link', async (_, rawUrl) => {
+  try {
+    const value = typeof rawUrl === 'string' ? rawUrl.trim() : '';
+    if (!value) {
+      return { ok: false, message: 'Lien invalide.' };
+    }
+
+    let parsed;
+    try {
+      parsed = new URL(value);
+    } catch {
+      return { ok: false, message: 'Lien invalide.' };
+    }
+
+    if (!['https:', 'http:'].includes(parsed.protocol)) {
+      return { ok: false, message: 'Protocole non autorise.' };
+    }
+
+    await shell.openExternal(parsed.toString());
+    return { ok: true };
+  } catch (error) {
+    const message = error && error.message ? error.message : String(error);
+    return { ok: false, message: `Impossible d'ouvrir le lien: ${message}` };
+  }
+});
+
 ipcMain.handle('profiles:list', async () => {
   const store = readProfilesStore();
   writeProfilesStore(store);
