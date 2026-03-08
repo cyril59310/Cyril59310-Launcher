@@ -56,6 +56,7 @@ let knownProfile = null;
 let knownProfiles = [];
 let activeProfileId = null;
 let profileNoticeTimeout = null;
+const DEFAULT_PLAYER_HEAD_URL = 'https://mc-heads.net/avatar/1/36';
 
 const normalizeUuid = (value) => {
   if (typeof value !== 'string') {
@@ -76,7 +77,7 @@ const buildPlayerHeadUrl = (uuid, name) => {
     return `https://mc-heads.net/avatar/${encodeURIComponent(safeName)}/36`;
   }
 
-  return 'assets/logo.png';
+  return DEFAULT_PLAYER_HEAD_URL;
 };
 
 const hideAccountIdentity = () => {
@@ -86,8 +87,9 @@ const hideAccountIdentity = () => {
 
   accountIdentityEl.classList.add('is-offline');
   playerNameEl.textContent = 'Aucun compte';
-  playerHeadEl.src = 'assets/logo.png';
-  playerHeadEl.alt = 'Tête du joueur';
+  playerHeadEl.dataset.fallback = '0';
+  playerHeadEl.src = DEFAULT_PLAYER_HEAD_URL;
+  playerHeadEl.alt = 'Tête de Steve';
 };
 
 const renderAccountIdentity = () => {
@@ -114,12 +116,18 @@ const renderAccountIdentity = () => {
 
 if (playerHeadEl) {
   playerHeadEl.addEventListener('error', () => {
+    if (playerHeadEl.dataset.fallback === '2') {
+      return;
+    }
+
     if (playerHeadEl.dataset.fallback === '1') {
+      playerHeadEl.dataset.fallback = '2';
+      playerHeadEl.src = 'assets/logo.png';
       return;
     }
 
     playerHeadEl.dataset.fallback = '1';
-    playerHeadEl.src = 'assets/logo.png';
+    playerHeadEl.src = DEFAULT_PLAYER_HEAD_URL;
   });
 }
 
