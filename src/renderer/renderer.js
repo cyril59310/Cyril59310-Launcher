@@ -31,6 +31,7 @@ const accountIdentityEl = document.getElementById('accountIdentity');
 const playerHeadEl = document.getElementById('playerHead');
 const playerNameEl = document.getElementById('playerName');
 const versionEl = document.getElementById('version');
+const launchAdvancedDetailsEl = document.getElementById('launchAdvancedDetails');
 const modloaderEl = document.getElementById('modloader');
 const modloaderVersionEl = document.getElementById('modloaderVersion');
 const updateStatusEl = document.getElementById('updateStatus');
@@ -61,6 +62,8 @@ let knownProfiles = [];
 let activeProfileId = null;
 let profileNoticeTimeout = null;
 const DEFAULT_PLAYER_HEAD_URL = 'https://mc-heads.net/avatar/1/36';
+const MAX_LOG_LINES = 1800;
+const logLines = [];
 
 const normalizeUuid = (value) => {
   if (typeof value !== 'string') {
@@ -141,8 +144,26 @@ const setProgress = (percent, label) => {
   progressEl.textContent = label || `Progression: ${Math.round(clamped)}%`;
 };
 
+const sanitizeLogLine = (line) => {
+  const value = typeof line === 'string' ? line : String(line ?? '');
+  return value
+    .replace(/\u001b\[[0-9;]*[A-Za-z]/g, '')
+    .replace(/\r/g, '')
+    .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g, '');
+};
+
 const appendLog = (line) => {
-  logsEl.textContent += `${line}\n`;
+  const cleaned = sanitizeLogLine(line);
+  if (!cleaned) {
+    return;
+  }
+
+  logLines.push(cleaned);
+  if (logLines.length > MAX_LOG_LINES) {
+    logLines.splice(0, logLines.length - MAX_LOG_LINES);
+  }
+
+  logsEl.textContent = `${logLines.join('\n')}\n`;
   logsEl.scrollTop = logsEl.scrollHeight;
 };
 
@@ -811,6 +832,9 @@ versionEl.addEventListener('change', () => {
 if (modloaderEl) {
   modloaderEl.addEventListener('change', () => {
     localStorage.setItem(MODLOADER_STORAGE_KEY, modloaderEl.value || 'vanilla');
+    if (launchAdvancedDetailsEl) {
+      launchAdvancedDetailsEl.open = modloaderEl.value !== 'vanilla';
+    }
     void loadModloaderVersions('');
   });
 }
@@ -874,6 +898,7 @@ launchForm.addEventListener('submit', async (event) => {
 
   launchBtn.disabled = true;
   statusEl.textContent = 'Initialisation du lancement...';
+  logLines.length = 0;
   logsEl.textContent = '';
   setProgress(0, 'Progression: 0%');
 
@@ -966,6 +991,10 @@ const restoreModloaderPreference = () => {
   const saved = localStorage.getItem(MODLOADER_STORAGE_KEY) || 'vanilla';
   const allowed = ['vanilla', 'fabric', 'forge', 'neoforge'];
   modloaderEl.value = allowed.includes(saved) ? saved : 'vanilla';
+
+  if (launchAdvancedDetailsEl) {
+    launchAdvancedDetailsEl.open = false;
+  }
 };
 
 const loadProfiles = async () => {

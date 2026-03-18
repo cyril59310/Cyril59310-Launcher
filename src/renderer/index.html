@@ -82,23 +82,6 @@
             </div>
 
             <div>
-              <label for="modloader">Modloader</label>
-              <select id="modloader" name="modloader">
-                <option value="vanilla">Vanilla</option>
-                <option value="fabric">Fabric</option>
-                <option value="forge">Forge</option>
-                <option value="neoforge">NeoForge</option>
-              </select>
-            </div>
-
-            <div>
-              <label for="modloaderVersion">Version modloader</label>
-              <select id="modloaderVersion" name="modloaderVersion">
-                <option value="">Automatique (dernier)</option>
-              </select>
-            </div>
-
-            <div>
               <label for="memoryMb">RAM max</label>
               <select id="memoryMb" name="memoryMb" required>
                 <option value="4096">4 Go</option>
@@ -108,10 +91,35 @@
             </div>
           </div>
 
-          <label class="checkbox-row" for="includeSnapshots">
-            <input id="includeSnapshots" name="includeSnapshots" type="checkbox" />
-            Afficher les versions snapshot
-          </label>
+          <details id="launchAdvancedDetails" class="advanced-launch-block">
+            <summary class="advanced-launch-summary">Options avancées</summary>
+
+            <div class="advanced-launch-content">
+              <div class="advanced-launch-grid">
+                <div>
+                  <label for="modloader">Modloader</label>
+                  <select id="modloader" name="modloader">
+                    <option value="vanilla">Vanilla</option>
+                    <option value="fabric">Fabric</option>
+                    <option value="forge">Forge</option>
+                    <option value="neoforge">NeoForge</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label for="modloaderVersion">Version modloader</label>
+                  <select id="modloaderVersion" name="modloaderVersion">
+                    <option value="">Automatique (dernier)</option>
+                  </select>
+                </div>
+              </div>
+
+              <label class="checkbox-row" for="includeSnapshots">
+                <input id="includeSnapshots" name="includeSnapshots" type="checkbox" />
+                Afficher les versions snapshot
+              </label>
+            </div>
+          </details>
 
           <div class="row-actions">
             <button id="launchBtn" type="submit">Lancer Minecraft</button>
