@@ -1,7 +1,7 @@
-const path = require('path');
+﻿const path = require('path');
 const fs = require('fs');
 const https = require('https');
-const { spawn } = require('child_process');
+const { spawn, spawnSync } = require('child_process');
 const { app, BrowserWindow, ipcMain, shell, dialog } = require('electron');
 const { autoUpdater } = require('electron-updater');
 const { Client } = require('minecraft-launcher-core');
@@ -386,6 +386,39 @@ function findJavaBinary(baseDir, useWindowlessBinary) {
   return walk(baseDir, 0);
 }
 
+function readJavaMajorFromBinary(javaPath) {
+  if (typeof javaPath !== 'string' || !javaPath.trim()) {
+    return null;
+  }
+
+  try {
+    const result = spawnSync(javaPath, ['-version'], {
+      windowsHide: true,
+      encoding: 'utf-8'
+    });
+
+    const output = `${result.stdout || ''}\n${result.stderr || ''}`;
+    const match = output.match(/version\s+"(\d+)(?:\.(\d+))?/i);
+    if (!match) {
+      return null;
+    }
+
+    const first = Number(match[1]);
+    const second = match[2] ? Number(match[2]) : null;
+    if (!Number.isFinite(first)) {
+      return null;
+    }
+
+    if (first === 1 && Number.isFinite(second)) {
+      return second;
+    }
+
+    return first;
+  } catch {
+    return null;
+  }
+}
+
 async function ensurePortableJavaForVersion(version, versionType, hideConsole) {
   const javaMajor = await resolveRequiredJavaMajor(version, versionType);
 
@@ -404,8 +437,26 @@ async function ensurePortableJavaForVersion(version, versionType, hideConsole) {
 
   const existingJava = findJavaBinary(runtimeDir, hideConsole);
   if (existingJava) {
+    const existingJavaMajor = readJavaMajorFromBinary(existingJava);
+    if (Number.isFinite(existingJavaMajor) && existingJavaMajor < javaMajor) {
+      try {
+        fs.rmSync(runtimeDir, { recursive: true, force: true });
+      } catch {
+      }
+      fs.mkdirSync(runtimeDir, { recursive: true });
+    } else {
+      return {
+        javaPath: existingJava,
+        javaMajor,
+        source: 'portable-cache'
+      };
+    }
+  }
+
+  const refreshedJava = findJavaBinary(runtimeDir, hideConsole);
+  if (refreshedJava) {
     return {
-      javaPath: existingJava,
+      javaPath: refreshedJava,
       javaMajor,
       source: 'portable-cache'
     };
@@ -475,6 +526,11 @@ async function ensurePortableJavaForVersion(version, versionType, hideConsole) {
   const javaPath = findJavaBinary(runtimeDir, hideConsole);
   if (!javaPath) {
     throw new Error(`Java portable introuvable après extraction (Java ${javaMajor}).`);
+  }
+
+  const detectedMajor = readJavaMajorFromBinary(javaPath);
+  if (Number.isFinite(detectedMajor) && detectedMajor < javaMajor) {
+    throw new Error(`Runtime Java portable invalide: version ${detectedMajor} détectée, Java ${javaMajor} requis.`);
   }
 
   return {
@@ -995,11 +1051,9 @@ async function getNeoForgeVersionsForMinecraft(minecraftVersion) {
   const minor = Number(match[1]);
   const patch = Number(match[2] || 0);
   const strictPrefix = `${minor}.${patch}.`;
-  const relaxedPrefix = `${minor}.`;
 
-  const strict = all.filter((entry) => entry.startsWith(strictPrefix));
-  const relaxed = all.filter((entry) => entry.startsWith(relaxedPrefix));
-  const selected = strict.length ? strict : relaxed;
+  // When patch is explicitly known (example: 1.20.1), only accept matching NeoForge branch (20.1.x).
+  const selected = all.filter((entry) => entry.startsWith(strictPrefix));
   return sortVersionsDescending([...new Set(selected)]).slice(0, 120);
 }
 
@@ -1189,7 +1243,9 @@ async function ensureNeoForgeInstalled(javaPath, rootDir, minecraftVersion, requ
 
   const versionMatcher = (id) => id.toLowerCase().includes('neoforge') && id.includes(resolvedLoaderVersion);
   const alreadyInstalled = findInstalledCustomVersionId(rootDir, versionMatcher, { validateJson: true });
-  if (alreadyInstalled) {
+  const neoforgeLibDir = path.join(rootDir, 'libraries', 'net', 'neoforged', 'neoforge', resolvedLoaderVersion);
+  const neoforgeLibPresent = fs.existsSync(neoforgeLibDir) && fs.readdirSync(neoforgeLibDir).some(f => f.endsWith('.jar'));
+  if (alreadyInstalled && neoforgeLibPresent) {
     return { customVersion: alreadyInstalled, loaderVersion: resolvedLoaderVersion };
   }
 
@@ -1427,6 +1483,134 @@ ipcMain.handle('launcher:start', async (_, payload) => {
       }
 
       launchOptions.version.custom = result.customVersion;
+
+      if (selectedModloader === 'forge' || selectedModloader === 'neoforge') {
+        try {
+          const customVersionJsonPath = path.join(effectiveRoot, 'versions', result.customVersion, `${result.customVersion}.json`);
+          const customVersionJson = JSON.parse(fs.readFileSync(customVersionJsonPath, 'utf-8'));
+          const inheritedVersion = typeof customVersionJson.inheritsFrom === 'string'
+            ? customVersionJson.inheritsFrom.trim()
+            : '';
+
+          if (inheritedVersion) {
+            const runtimeForInherited = await ensurePortableJavaForVersion(inheritedVersion, resolvedVersionType, hideConsole);
+            launchOptions.javaPath = runtimeForInherited.javaPath;
+            launchOptions.version.number = inheritedVersion;
+            javaRuntime = runtimeForInherited;
+            sendLog(`[java] Runtime ajusté pour ${selectedModloader}: Java ${runtimeForInherited.javaMajor} (${inheritedVersion}).`);
+          }
+        } catch {
+        }
+      }
+
+      if (selectedModloader === 'neoforge' || selectedModloader === 'forge') {
+        const libraryDir = path.join(effectiveRoot, 'libraries').replace(/\\/g, '/');
+        const classpathSeparator = process.platform === 'win32' ? ';' : ':';
+        const versionName = result.customVersion || trimmedVersion;
+        const customVersionJsonPath = path.join(effectiveRoot, 'versions', result.customVersion, `${result.customVersion}.json`);
+        const extraJvmArgs = [];
+        try {
+          const versionJson = JSON.parse(fs.readFileSync(customVersionJsonPath, 'utf-8'));
+          const rawJvmArgs = Array.isArray(versionJson.arguments && versionJson.arguments.jvm)
+            ? versionJson.arguments.jvm
+            : [];
+
+          const flattenedJvmArgs = [];
+          for (const entry of rawJvmArgs) {
+            if (typeof entry === 'string') {
+              flattenedJvmArgs.push(entry);
+              continue;
+            }
+
+            if (!entry || typeof entry !== 'object') {
+              continue;
+            }
+
+            const value = entry.value;
+            if (typeof value === 'string') {
+              flattenedJvmArgs.push(value);
+              continue;
+            }
+
+            if (Array.isArray(value)) {
+              for (const valueEntry of value) {
+                if (typeof valueEntry === 'string') {
+                  flattenedJvmArgs.push(valueEntry);
+                }
+              }
+            }
+          }
+
+          const normalizedJvmArgs = [];
+          for (const arg of flattenedJvmArgs) {
+            const normalizedArg = arg
+              .replace(/\$\{library_directory\}/g, libraryDir)
+              .replace(/\$\{classpath_separator\}/g, classpathSeparator)
+              .replace(/\$\{version_name\}/g, versionName);
+            // Keep only fully resolved args to avoid invalid path errors at JVM startup.
+            if (normalizedArg.includes('${')) continue;
+            normalizedJvmArgs.push(normalizedArg);
+          }
+
+          const optionsExpectingValue = new Set([
+            '--add-opens',
+            '--add-exports',
+            '--add-reads',
+            '--add-modules',
+            '--module-path',
+            '-p',
+            '-classpath',
+            '-cp'
+          ]);
+
+          for (let index = 0; index < normalizedJvmArgs.length; index += 1) {
+            const currentArg = normalizedJvmArgs[index];
+
+            if (optionsExpectingValue.has(currentArg)) {
+              const valueArg = normalizedJvmArgs[index + 1];
+              if (typeof valueArg === 'string' && valueArg.trim()) {
+                extraJvmArgs.push(currentArg, valueArg);
+                index += 1;
+              }
+              continue;
+            }
+
+            // Drop standalone "module/package=target" entries when the option is missing.
+            if (/^[a-zA-Z0-9_.]+\/[a-zA-Z0-9_.]+=[^\s]+$/.test(currentArg)) {
+              continue;
+            }
+
+            extraJvmArgs.push(currentArg);
+          }
+        } catch {
+          extraJvmArgs.push('-Djava.net.preferIPv6Addresses=system');
+          extraJvmArgs.push(`-DlibraryDirectory=${libraryDir}`);
+          extraJvmArgs.push('--add-opens');
+          extraJvmArgs.push('java.base/java.lang.invoke=ALL-UNNAMED');
+          extraJvmArgs.push('--add-exports');
+          extraJvmArgs.push('jdk.naming.dns/com.sun.jndi.dns=java.naming');
+        }
+        if (!extraJvmArgs.some(arg => arg.startsWith('-DlibraryDirectory='))) {
+          extraJvmArgs.push(`-DlibraryDirectory=${libraryDir}`);
+        }
+
+        // Deduplicate only JVM system properties; repeated flags like --add-opens are valid.
+        const seenProperties = new Set();
+        launchOptions.customArgs = extraJvmArgs.filter((arg) => {
+          if (!arg.startsWith('-D')) {
+            return true;
+          }
+
+          const propertyKey = arg.split('=')[0];
+          if (seenProperties.has(propertyKey)) {
+            return false;
+          }
+
+          seenProperties.add(propertyKey);
+          return true;
+        });
+      }
+
       sendLog(`[modloader] ${selectedModloader} prêt (${result.loaderVersion}).`);
     } catch (error) {
       const message = error && error.message ? error.message : String(error);
