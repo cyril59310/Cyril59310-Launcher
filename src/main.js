@@ -925,6 +925,11 @@ function runJavaProcess(javaPath, args, cwd) {
       windowsHide: true
     });
 
+    let stdout = '';
+    child.stdout.on('data', (chunk) => {
+      stdout += chunk.toString();
+    });
+
     let stderr = '';
     child.stderr.on('data', (chunk) => {
       stderr += chunk.toString();
@@ -936,7 +941,9 @@ function runJavaProcess(javaPath, args, cwd) {
         resolve();
         return;
       }
-      reject(new Error(stderr.trim() || `Processus Java terminé avec le code ${code}.`));
+
+      const details = [stderr.trim(), stdout.trim()].filter(Boolean).join('\n');
+      reject(new Error(details || `Processus Java terminé avec le code ${code}.`));
     });
   });
 }
@@ -996,7 +1003,9 @@ async function getNeoForgeVersionsForMinecraft(minecraftVersion) {
   return sortVersionsDescending([...new Set(selected)]).slice(0, 120);
 }
 
-function findInstalledCustomVersionId(rootDir, matcher) {
+function findInstalledCustomVersionId(rootDir, matcher, options = {}) {
+  const requireJar = Boolean(options && options.requireJar);
+  const validateJson = Boolean(options && options.validateJson);
   const versionsDir = path.join(rootDir, 'versions');
   if (!fs.existsSync(versionsDir)) {
     return null;
@@ -1014,12 +1023,72 @@ function findInstalledCustomVersionId(rootDir, matcher) {
     }
 
     const jsonPath = path.join(versionsDir, id, `${id}.json`);
-    if (fs.existsSync(jsonPath)) {
+    const jarPath = path.join(versionsDir, id, `${id}.jar`);
+    const hasJson = fs.existsSync(jsonPath);
+    const hasJar = fs.existsSync(jarPath);
+
+    if (hasJson && validateJson) {
+      try {
+        const raw = fs.readFileSync(jsonPath, 'utf-8');
+        const parsed = JSON.parse(raw);
+        if (!parsed || typeof parsed !== 'object') {
+          continue;
+        }
+        const metadataLooksValid = typeof parsed.id === 'string' && parsed.id.trim();
+        if (!metadataLooksValid) {
+          continue;
+        }
+      } catch {
+        continue;
+      }
+    }
+
+    if (hasJson && (!requireJar || hasJar)) {
       return id;
     }
   }
 
   return null;
+}
+
+function removeInstalledCustomVersions(rootDir, matcher) {
+  const versionsDir = path.join(rootDir, 'versions');
+  if (!fs.existsSync(versionsDir)) {
+    return;
+  }
+
+  const entries = fs.readdirSync(versionsDir, { withFileTypes: true });
+  for (const entry of entries) {
+    if (!entry.isDirectory()) {
+      continue;
+    }
+
+    const id = entry.name;
+    if (!matcher(id)) {
+      continue;
+    }
+
+    const targetDir = path.join(versionsDir, id);
+    try {
+      fs.rmSync(targetDir, { recursive: true, force: true });
+    } catch {
+    }
+  }
+}
+
+function ensureLauncherProfilesFile(rootDir) {
+  const launcherProfilesPath = path.join(rootDir, 'launcher_profiles.json');
+  if (fs.existsSync(launcherProfilesPath)) {
+    return;
+  }
+
+  const placeholder = {
+    profiles: {},
+    settings: {},
+    version: 2
+  };
+
+  fs.writeFileSync(launcherProfilesPath, JSON.stringify(placeholder, null, 2), 'utf-8');
 }
 
 async function ensureFabricInstalled(rootDir, minecraftVersion, requestedLoaderVersion) {
@@ -1052,8 +1121,20 @@ async function ensureForgeInstalled(javaPath, rootDir, minecraftVersion, request
   const resolvedLoaderVersion = requestedLoaderVersion && versions.includes(requestedLoaderVersion)
     ? requestedLoaderVersion
     : versions[0];
+
+  const versionMatcher = (id) => id.includes(`forge-${resolvedLoaderVersion}`);
+  const alreadyInstalled = findInstalledCustomVersionId(rootDir, versionMatcher, { validateJson: true });
+  if (alreadyInstalled) {
+    return { customVersion: alreadyInstalled, loaderVersion: resolvedLoaderVersion };
+  }
+
+  removeInstalledCustomVersions(rootDir, versionMatcher);
+
   const fullForgeVersion = `${minecraftVersion}-${resolvedLoaderVersion}`;
   const installerUrl = `https://maven.minecraftforge.net/net/minecraftforge/forge/${fullForgeVersion}/forge-${fullForgeVersion}-installer.jar`;
+
+  ensureProfileDirectory(rootDir);
+  ensureLauncherProfilesFile(rootDir);
 
   ensureModloadersRoot();
   const installerPath = path.join(modloadersRoot(), `forge-${fullForgeVersion}-installer.jar`);
@@ -1080,10 +1161,15 @@ async function ensureForgeInstalled(javaPath, rootDir, minecraftVersion, request
   }
 
   if (!installed) {
+    const installedAfterFailure = findInstalledCustomVersionId(rootDir, versionMatcher, { validateJson: true });
+    if (installedAfterFailure) {
+      return { customVersion: installedAfterFailure, loaderVersion: resolvedLoaderVersion };
+    }
+
     throw new Error(lastError && lastError.message ? lastError.message : 'Installation Forge échouée.');
   }
 
-  const customVersion = findInstalledCustomVersionId(rootDir, (id) => id.includes(`forge-${resolvedLoaderVersion}`));
+  const customVersion = findInstalledCustomVersionId(rootDir, versionMatcher, { validateJson: true });
   if (!customVersion) {
     throw new Error('Version Forge installée introuvable dans le dossier versions.');
   }
@@ -1100,7 +1186,19 @@ async function ensureNeoForgeInstalled(javaPath, rootDir, minecraftVersion, requ
   const resolvedLoaderVersion = requestedLoaderVersion && versions.includes(requestedLoaderVersion)
     ? requestedLoaderVersion
     : versions[0];
+
+  const versionMatcher = (id) => id.toLowerCase().includes('neoforge') && id.includes(resolvedLoaderVersion);
+  const alreadyInstalled = findInstalledCustomVersionId(rootDir, versionMatcher, { validateJson: true });
+  if (alreadyInstalled) {
+    return { customVersion: alreadyInstalled, loaderVersion: resolvedLoaderVersion };
+  }
+
+  removeInstalledCustomVersions(rootDir, versionMatcher);
+
   const installerUrl = `https://maven.neoforged.net/releases/net/neoforged/neoforge/${resolvedLoaderVersion}/neoforge-${resolvedLoaderVersion}-installer.jar`;
+
+  ensureProfileDirectory(rootDir);
+  ensureLauncherProfilesFile(rootDir);
 
   ensureModloadersRoot();
   const installerPath = path.join(modloadersRoot(), `neoforge-${resolvedLoaderVersion}-installer.jar`);
@@ -1128,10 +1226,15 @@ async function ensureNeoForgeInstalled(javaPath, rootDir, minecraftVersion, requ
   }
 
   if (!installed) {
+    const installedAfterFailure = findInstalledCustomVersionId(rootDir, versionMatcher, { validateJson: true });
+    if (installedAfterFailure) {
+      return { customVersion: installedAfterFailure, loaderVersion: resolvedLoaderVersion };
+    }
+
     throw new Error(lastError && lastError.message ? lastError.message : 'Installation NeoForge échouée.');
   }
 
-  const customVersion = findInstalledCustomVersionId(rootDir, (id) => id.toLowerCase().includes('neoforge') && id.includes(resolvedLoaderVersion));
+  const customVersion = findInstalledCustomVersionId(rootDir, versionMatcher, { validateJson: true });
   if (!customVersion) {
     throw new Error('Version NeoForge installée introuvable dans le dossier versions.');
   }
@@ -1283,17 +1386,16 @@ ipcMain.handle('launcher:start', async (_, payload) => {
   const launcher = new Client();
   const requestedGameDirectory = normalizeGameDirectoryPath(gameDirectory);
   const minecraftDirectory = requestedGameDirectory || launcherRoot();
-  const globalMinecraftRoot = launcherRoot();
   ensureProfileDirectory(minecraftDirectory);
-  ensureProfileDirectory(globalMinecraftRoot);
   const authorization = normalizeAuthorizationForLaunch(microsoftAuth);
   const trimmedVersion = version.trim();
   const selectedModloader = normalizeModloader(modloader);
   const requestedLoaderVersion = typeof modloaderVersion === 'string' ? modloaderVersion.trim() : '';
+  const effectiveRoot = minecraftDirectory;
 
   const launchOptions = {
     authorization,
-    root: globalMinecraftRoot,
+    root: effectiveRoot,
     javaPath: javaRuntime.javaPath,
     overrides: {
       detached: true,
@@ -1317,11 +1419,11 @@ ipcMain.handle('launcher:start', async (_, payload) => {
 
       let result;
       if (selectedModloader === 'fabric') {
-        result = await ensureFabricInstalled(globalMinecraftRoot, trimmedVersion, requestedLoaderVersion || null);
+        result = await ensureFabricInstalled(effectiveRoot, trimmedVersion, requestedLoaderVersion || null);
       } else if (selectedModloader === 'forge') {
-        result = await ensureForgeInstalled(javaRuntime.javaPath, globalMinecraftRoot, trimmedVersion, requestedLoaderVersion || null);
+        result = await ensureForgeInstalled(javaRuntime.javaPath, effectiveRoot, trimmedVersion, requestedLoaderVersion || null);
       } else {
-        result = await ensureNeoForgeInstalled(javaRuntime.javaPath, globalMinecraftRoot, trimmedVersion, requestedLoaderVersion || null);
+        result = await ensureNeoForgeInstalled(javaRuntime.javaPath, effectiveRoot, trimmedVersion, requestedLoaderVersion || null);
       }
 
       launchOptions.version.custom = result.customVersion;
