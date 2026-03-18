@@ -31,6 +31,8 @@ const accountIdentityEl = document.getElementById('accountIdentity');
 const playerHeadEl = document.getElementById('playerHead');
 const playerNameEl = document.getElementById('playerName');
 const versionEl = document.getElementById('version');
+const modloaderEl = document.getElementById('modloader');
+const modloaderVersionEl = document.getElementById('modloaderVersion');
 const updateStatusEl = document.getElementById('updateStatus');
 const checkUpdateBtn = document.getElementById('checkUpdateBtn');
 const installUpdateBtn = document.getElementById('installUpdateBtn');
@@ -47,6 +49,8 @@ const CONSOLE_STORAGE_KEY = 'launcher.disableGameConsole';
 const CLOSE_LAUNCHER_STORAGE_KEY = 'launcher.closeOnStart';
 const VERSION_STORAGE_KEY = 'launcher.gameVersion';
 const SNAPSHOTS_STORAGE_KEY = 'launcher.includeSnapshots';
+const MODLOADER_STORAGE_KEY = 'launcher.modloader';
+const MODLOADER_VERSION_STORAGE_KEY = 'launcher.modloaderVersion';
 
 let availableVersions = [];
 let updateReady = false;
@@ -189,11 +193,13 @@ const applyStoredProfileVersion = async (profile) => {
 
   if (!hasVersionOption()) {
     setProfileNotice(`Version du profil introuvable: ${targetVersion}`, 'error', true);
+    await loadModloaderVersions();
     return;
   }
 
   versionEl.value = targetVersion;
   localStorage.setItem(VERSION_STORAGE_KEY, targetVersion);
+  await loadModloaderVersions();
 };
 
 const getActiveProfile = () => {
@@ -798,8 +804,22 @@ versionEl.addEventListener('change', () => {
     localStorage.setItem(VERSION_STORAGE_KEY, versionEl.value);
   }
 
+  void loadModloaderVersions();
   void persistActiveProfile();
 });
+
+if (modloaderEl) {
+  modloaderEl.addEventListener('change', () => {
+    localStorage.setItem(MODLOADER_STORAGE_KEY, modloaderEl.value || 'vanilla');
+    void loadModloaderVersions('');
+  });
+}
+
+if (modloaderVersionEl) {
+  modloaderVersionEl.addEventListener('change', () => {
+    localStorage.setItem(MODLOADER_VERSION_STORAGE_KEY, modloaderVersionEl.value || '');
+  });
+}
 
 includeSnapshotsEl.addEventListener('change', () => {
   localStorage.setItem(SNAPSHOTS_STORAGE_KEY, includeSnapshotsEl.checked ? '1' : '0');
@@ -817,13 +837,17 @@ launchForm.addEventListener('submit', async (event) => {
     disableGameConsole: disableGameConsoleEl.checked,
     closeLauncherOnStart: closeLauncherOnStartEl.checked,
     accountId: msAccountSelectEl.value || null,
-    gameDirectory: profileGameDirectoryEl ? profileGameDirectoryEl.value : null
+    gameDirectory: profileGameDirectoryEl ? profileGameDirectoryEl.value : null,
+    modloader: modloaderEl ? modloaderEl.value : 'vanilla',
+    modloaderVersion: modloaderVersionEl ? modloaderVersionEl.value : ''
   };
 
   localStorage.setItem(RAM_STORAGE_KEY, String(payload.memoryMb));
   localStorage.setItem(CONSOLE_STORAGE_KEY, payload.disableGameConsole ? '1' : '0');
   localStorage.setItem(CLOSE_LAUNCHER_STORAGE_KEY, payload.closeLauncherOnStart ? '1' : '0');
   localStorage.setItem(VERSION_STORAGE_KEY, payload.version);
+  localStorage.setItem(MODLOADER_STORAGE_KEY, payload.modloader || 'vanilla');
+  localStorage.setItem(MODLOADER_VERSION_STORAGE_KEY, payload.modloaderVersion || '');
 
   const activeProfile = getActiveProfile();
   if (activeProfile && activeProfile.id && payload.version) {
@@ -934,6 +958,16 @@ const restoreSnapshotPreference = () => {
   includeSnapshotsEl.checked = saved === '1';
 };
 
+const restoreModloaderPreference = () => {
+  if (!modloaderEl) {
+    return;
+  }
+
+  const saved = localStorage.getItem(MODLOADER_STORAGE_KEY) || 'vanilla';
+  const allowed = ['vanilla', 'fabric', 'forge', 'neoforge'];
+  modloaderEl.value = allowed.includes(saved) ? saved : 'vanilla';
+};
+
 const loadProfiles = async () => {
   try {
     const result = await window.mcLauncher.listProfiles();
@@ -987,6 +1021,81 @@ const renderVersionOptions = (versions, selectedVersion) => {
   versionEl.value = ids[0];
 };
 
+const renderModloaderVersionOptions = (versions, selectedVersion) => {
+  if (!modloaderVersionEl) {
+    return;
+  }
+
+  const allVersions = Array.isArray(versions)
+    ? versions.filter((entry) => typeof entry === 'string' && entry.trim())
+    : [];
+  const desired = typeof selectedVersion === 'string' ? selectedVersion.trim() : '';
+
+  modloaderVersionEl.innerHTML = '';
+
+  const autoOption = document.createElement('option');
+  autoOption.value = '';
+  autoOption.textContent = 'Automatique (dernier)';
+  modloaderVersionEl.appendChild(autoOption);
+
+  allVersions.forEach((loaderVersion) => {
+    const option = document.createElement('option');
+    option.value = loaderVersion;
+    option.textContent = loaderVersion;
+    modloaderVersionEl.appendChild(option);
+  });
+
+  if (desired && allVersions.includes(desired)) {
+    modloaderVersionEl.value = desired;
+  } else {
+    modloaderVersionEl.value = '';
+  }
+
+  localStorage.setItem(MODLOADER_VERSION_STORAGE_KEY, modloaderVersionEl.value || '');
+};
+
+const loadModloaderVersions = async (preferredVersionOverride) => {
+  if (!modloaderEl || !modloaderVersionEl) {
+    return;
+  }
+
+  const selectedModloader = modloaderEl.value || 'vanilla';
+  const selectedMcVersion = versionEl.value || '';
+  const preferred = typeof preferredVersionOverride === 'string'
+    ? preferredVersionOverride
+    : (localStorage.getItem(MODLOADER_VERSION_STORAGE_KEY) || '');
+
+  if (selectedModloader === 'vanilla' || !selectedMcVersion) {
+    renderModloaderVersionOptions([], '');
+    modloaderVersionEl.disabled = true;
+    return;
+  }
+
+  modloaderVersionEl.disabled = true;
+
+  try {
+    const result = await window.mcLauncher.getModloaderVersions({
+      modloader: selectedModloader,
+      minecraftVersion: selectedMcVersion
+    });
+
+    if (result && result.ok) {
+      renderModloaderVersionOptions(result.versions || [], preferred);
+      modloaderVersionEl.disabled = false;
+      return;
+    }
+
+    renderModloaderVersionOptions([], '');
+    modloaderVersionEl.disabled = false;
+    if (result && result.message) {
+      appendLog(`[modloader] ${result.message}`);
+    }
+  } catch {
+    renderModloaderVersionOptions([], '');
+    modloaderVersionEl.disabled = false;
+  }
+};
+
 const loadVersions = async (preferredVersionOverride) => {
   const savedVersion = preferredVersionOverride || localStorage.getItem(VERSION_STORAGE_KEY);
   const includeSnapshots = includeSnapshotsEl.checked;
@@ -1002,6 +1111,7 @@ const loadVersions = async (preferredVersionOverride) => {
       if (versionEl.value) {
         localStorage.setItem(VERSION_STORAGE_KEY, versionEl.value);
       }
+      await loadModloaderVersions();
       return;
     }
   } catch {
@@ -1009,6 +1119,7 @@ const loadVersions = async (preferredVersionOverride) => {
 
   const fallbackVersion = savedVersion || '1.21.11';
   renderVersionOptions([{ id: fallbackVersion, type: 'release' }], fallbackVersion);
+  await loadModloaderVersions();
   statusEl.textContent = 'Liste des versions indisponible, version locale utilisée.';
 };
 
@@ -1033,6 +1144,7 @@ restoreRamPreference();
 restoreConsolePreference();
 restoreCloseLauncherPreference();
 restoreSnapshotPreference();
+restoreModloaderPreference();
 setProgress(0, 'Progression: 0%');
 
 const initializeRenderer = async () => {
