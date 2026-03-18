@@ -195,8 +195,23 @@ const applyStoredProfileVersion = async (profile) => {
   const targetVersion = profile && typeof profile.version === 'string'
     ? profile.version.trim()
     : '';
+  const targetModloader = profile && typeof profile.modloader === 'string'
+    ? profile.modloader.trim().toLowerCase()
+    : '';
+  const selectedModloader = ['vanilla', 'fabric', 'forge', 'neoforge'].includes(targetModloader)
+    ? targetModloader
+    : 'vanilla';
+  const targetModloaderVersion = profile && typeof profile.modloaderVersion === 'string'
+    ? profile.modloaderVersion.trim()
+    : '';
+
+  if (modloaderEl) {
+    modloaderEl.value = selectedModloader;
+    localStorage.setItem(MODLOADER_STORAGE_KEY, selectedModloader);
+  }
 
   if (!targetVersion) {
+    await loadModloaderVersions(targetModloaderVersion);
     return;
   }
 
@@ -220,7 +235,7 @@ const applyStoredProfileVersion = async (profile) => {
 
   versionEl.value = targetVersion;
   localStorage.setItem(VERSION_STORAGE_KEY, targetVersion);
-  await loadModloaderVersions();
+  await loadModloaderVersions(targetModloaderVersion);
 };
 
 const getActiveProfile = () => {
@@ -310,7 +325,9 @@ const persistActiveProfile = async ({ showStatus = false } = {}) => {
     id: profile.id,
     setActive: true,
     name: profileNameEl ? profileNameEl.value : profile.name,
-    gameDirectory: profileGameDirectoryEl ? profileGameDirectoryEl.value : profile.gameDirectory
+    gameDirectory: profileGameDirectoryEl ? profileGameDirectoryEl.value : profile.gameDirectory,
+    modloader: modloaderEl ? modloaderEl.value : (profile.modloader || 'vanilla'),
+    modloaderVersion: modloaderVersionEl ? modloaderVersionEl.value : (profile.modloaderVersion || '')
   };
 
   const result = await window.mcLauncher.updateProfile(payload);
@@ -836,12 +853,14 @@ if (modloaderEl) {
       launchAdvancedDetailsEl.open = modloaderEl.value !== 'vanilla';
     }
     void loadModloaderVersions('');
+    void persistActiveProfile();
   });
 }
 
 if (modloaderVersionEl) {
   modloaderVersionEl.addEventListener('change', () => {
     localStorage.setItem(MODLOADER_VERSION_STORAGE_KEY, modloaderVersionEl.value || '');
+    void persistActiveProfile();
   });
 }
 
@@ -879,7 +898,9 @@ launchForm.addEventListener('submit', async (event) => {
       const profileUpdate = await window.mcLauncher.updateProfile({
         id: activeProfile.id,
         setActive: true,
-        version: payload.version
+        version: payload.version,
+        modloader: payload.modloader,
+        modloaderVersion: payload.modloaderVersion
       });
 
       if (profileUpdate && profileUpdate.ok) {

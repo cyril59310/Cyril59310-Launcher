@@ -79,6 +79,8 @@ function createDefaultProfilesStore() {
       id: 'default',
       name: 'Profil par défaut',
       version: '',
+      modloader: 'vanilla',
+      modloaderVersion: '',
       gameDirectory: defaultGameDirectory()
     }]
   };
@@ -94,6 +96,8 @@ function normalizeProfilesStore(store) {
         id: String(entry.id).trim(),
         name: sanitizeProfileName(entry.name),
         version: typeof entry.version === 'string' ? entry.version.trim() : '',
+        modloader: normalizeModloader(entry.modloader),
+        modloaderVersion: typeof entry.modloaderVersion === 'string' ? entry.modloaderVersion.trim() : '',
         gameDirectory: normalizeGameDirectoryPath(entry.gameDirectory) || defaultGameDirectory()
       }))
     : [];
@@ -159,6 +163,8 @@ function publicProfiles(store) {
     id: entry.id,
     name: entry.name,
     version: entry.version,
+    modloader: entry.modloader,
+    modloaderVersion: entry.modloaderVersion,
     gameDirectory: entry.gameDirectory
   }));
 }
@@ -1533,6 +1539,8 @@ ipcMain.handle('profiles:create', async (_, requestedName) => {
     id,
     name: profileName,
     version: '',
+    modloader: 'vanilla',
+    modloaderVersion: '',
     gameDirectory
   };
 
@@ -1561,6 +1569,17 @@ ipcMain.handle('profiles:update', async (_, payload) => {
 
   if (typeof payload?.version === 'string') {
     profile.version = payload.version.trim();
+  }
+
+  if (typeof payload?.modloader === 'string') {
+    profile.modloader = normalizeModloader(payload.modloader);
+    if (profile.modloader === 'vanilla') {
+      profile.modloaderVersion = '';
+    }
+  }
+
+  if (typeof payload?.modloaderVersion === 'string') {
+    profile.modloaderVersion = payload.modloaderVersion.trim();
   }
 
   if (typeof payload?.gameDirectory === 'string') {
