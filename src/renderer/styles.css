@@ -296,6 +296,12 @@ input[type="text"][readonly] {
   color: var(--text);
 }
 
+.profile-summary-subline {
+  margin-top: 2px;
+  font-size: 0.88rem;
+  color: var(--muted);
+}
+
 .inline-field-row {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;

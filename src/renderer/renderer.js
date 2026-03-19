@@ -14,6 +14,7 @@ const profileNameEl = document.getElementById('profileName');
 const profileGameDirectoryEl = document.getElementById('profileGameDirectory');
 const profileNoticeEl = document.getElementById('profileNotice');
 const activeProfileLabelEl = document.getElementById('activeProfileLabel');
+const activeModloaderLabelEl = document.getElementById('activeModloaderLabel');
 const openProfileSettingsBtn = document.getElementById('openProfileSettingsBtn');
 const profileSettingsModal = document.getElementById('profileSettingsModal');
 const closeProfileSettingsBtn = document.getElementById('closeProfileSettingsBtn');
@@ -64,6 +65,33 @@ let profileNoticeTimeout = null;
 const DEFAULT_PLAYER_HEAD_URL = 'https://mc-heads.net/avatar/1/36';
 const MAX_LOG_LINES = 1800;
 const logLines = [];
+
+const formatModloaderLabel = (value) => {
+  const normalized = typeof value === 'string' ? value.trim().toLowerCase() : 'vanilla';
+
+  if (normalized === 'fabric') {
+    return 'Fabric';
+  }
+
+  if (normalized === 'forge') {
+    return 'Forge';
+  }
+
+  if (normalized === 'neoforge') {
+    return 'NeoForge';
+  }
+
+  return 'Vanilla';
+};
+
+const updateActiveModloaderLabel = (modloaderValue) => {
+  if (!activeModloaderLabelEl) {
+    return;
+  }
+
+  const currentModloader = modloaderValue || (modloaderEl ? modloaderEl.value : 'vanilla');
+  activeModloaderLabelEl.textContent = formatModloaderLabel(currentModloader);
+};
 
 const normalizeUuid = (value) => {
   if (typeof value !== 'string') {
@@ -297,6 +325,7 @@ const applyActiveProfileToForm = () => {
     if (activeProfileLabelEl) {
       activeProfileLabelEl.textContent = 'Aucun profil';
     }
+    updateActiveModloaderLabel('vanilla');
     return null;
   }
 
@@ -311,6 +340,8 @@ const applyActiveProfileToForm = () => {
   if (activeProfileLabelEl) {
     activeProfileLabelEl.textContent = profile.name || 'Profil';
   }
+
+  updateActiveModloaderLabel(profile.modloader || (modloaderEl ? modloaderEl.value : 'vanilla'));
 
   return profile;
 };
@@ -860,6 +891,7 @@ versionEl.addEventListener('change', () => {
 if (modloaderEl) {
   modloaderEl.addEventListener('change', () => {
     localStorage.setItem(MODLOADER_STORAGE_KEY, modloaderEl.value || 'vanilla');
+    updateActiveModloaderLabel(modloaderEl.value || 'vanilla');
     if (launchAdvancedDetailsEl) {
       launchAdvancedDetailsEl.open = modloaderEl.value !== 'vanilla';
     }
@@ -1027,6 +1059,8 @@ const restoreModloaderPreference = () => {
   if (launchAdvancedDetailsEl) {
     launchAdvancedDetailsEl.open = false;
   }
+
+  updateActiveModloaderLabel(modloaderEl.value || 'vanilla');
 };
 
 const loadProfiles = async () => {
