@@ -5,6 +5,7 @@ contextBridge.exposeInMainWorld('mcLauncher', {
   getAppVersion: () => ipcRenderer.invoke('launcher:app-version'),
   openExternalLink: (url) => ipcRenderer.invoke('launcher:open-external-link', url),
   getVersions: (options) => ipcRenderer.invoke('launcher:versions', options),
+  getModloaderVersions: (options) => ipcRenderer.invoke('launcher:modloader-versions', options),
   openGameFolder: (targetPath) => ipcRenderer.invoke('launcher:open-game-folder', targetPath),
   listProfiles: () => ipcRenderer.invoke('profiles:list'),
   createProfile: (name) => ipcRenderer.invoke('profiles:create', name),

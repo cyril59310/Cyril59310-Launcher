@@ -1,7 +1,7 @@
-const path = require('path');
+﻿const path = require('path');
 const fs = require('fs');
 const https = require('https');
-const { spawn } = require('child_process');
+const { spawn, spawnSync } = require('child_process');
 const { app, BrowserWindow, ipcMain, shell, dialog } = require('electron');
 const { autoUpdater } = require('electron-updater');
 const { Client } = require('minecraft-launcher-core');
@@ -19,7 +19,11 @@ const launcherRoot = () => path.join(app.getPath('appData'), '.Cyril59310-Launch
 const authStorePath = () => path.join(launcherRoot(), 'auth.json');
 const profilesStorePath = () => path.join(launcherRoot(), 'profiles.json');
 const runtimesRoot = () => path.join(launcherRoot(), 'runtime');
+const modloadersRoot = () => path.join(launcherRoot(), 'modloaders');
 const VERSION_MANIFEST_URL = 'https://launchermeta.mojang.com/mc/game/version_manifest_v2.json';
+const FABRIC_META_BASE_URL = 'https://meta.fabricmc.net/v2';
+const FORGE_MAVEN_METADATA_URL = 'https://maven.minecraftforge.net/net/minecraftforge/forge/maven-metadata.xml';
+const NEOFORGE_MAVEN_METADATA_URL = 'https://maven.neoforged.net/releases/net/neoforged/neoforge/maven-metadata.xml';
 const JAVA_API_BASE = 'https://api.adoptium.net/v3/binary/latest';
 const KEYTAR_SERVICE = 'Cyril59310-Launcher';
 
@@ -75,6 +79,8 @@ function createDefaultProfilesStore() {
       id: 'default',
       name: 'Profil par défaut',
       version: '',
+      modloader: 'vanilla',
+      modloaderVersion: '',
       gameDirectory: defaultGameDirectory()
     }]
   };
@@ -90,6 +96,8 @@ function normalizeProfilesStore(store) {
         id: String(entry.id).trim(),
         name: sanitizeProfileName(entry.name),
         version: typeof entry.version === 'string' ? entry.version.trim() : '',
+        modloader: normalizeModloader(entry.modloader),
+        modloaderVersion: typeof entry.modloaderVersion === 'string' ? entry.modloaderVersion.trim() : '',
         gameDirectory: normalizeGameDirectoryPath(entry.gameDirectory) || defaultGameDirectory()
       }))
     : [];
@@ -155,6 +163,8 @@ function publicProfiles(store) {
     id: entry.id,
     name: entry.name,
     version: entry.version,
+    modloader: entry.modloader,
+    modloaderVersion: entry.modloaderVersion,
     gameDirectory: entry.gameDirectory
   }));
 }
@@ -171,6 +181,11 @@ function profilesResponse(store, ok = true, message = 'OK') {
 function ensureRuntimesRoot() {
   ensureLauncherRoot();
   fs.mkdirSync(runtimesRoot(), { recursive: true });
+}
+
+function ensureModloadersRoot() {
+  ensureLauncherRoot();
+  fs.mkdirSync(modloadersRoot(), { recursive: true });
 }
 
 function getJavaMajorForVersion(version, versionType) {
@@ -371,6 +386,39 @@ function findJavaBinary(baseDir, useWindowlessBinary) {
   return walk(baseDir, 0);
 }
 
+function readJavaMajorFromBinary(javaPath) {
+  if (typeof javaPath !== 'string' || !javaPath.trim()) {
+    return null;
+  }
+
+  try {
+    const result = spawnSync(javaPath, ['-version'], {
+      windowsHide: true,
+      encoding: 'utf-8'
+    });
+
+    const output = `${result.stdout || ''}\n${result.stderr || ''}`;
+    const match = output.match(/version\s+"(\d+)(?:\.(\d+))?/i);
+    if (!match) {
+      return null;
+    }
+
+    const first = Number(match[1]);
+    const second = match[2] ? Number(match[2]) : null;
+    if (!Number.isFinite(first)) {
+      return null;
+    }
+
+    if (first === 1 && Number.isFinite(second)) {
+      return second;
+    }
+
+    return first;
+  } catch {
+    return null;
+  }
+}
+
 async function ensurePortableJavaForVersion(version, versionType, hideConsole) {
   const javaMajor = await resolveRequiredJavaMajor(version, versionType);
 
@@ -389,8 +437,26 @@ async function ensurePortableJavaForVersion(version, versionType, hideConsole) {
 
   const existingJava = findJavaBinary(runtimeDir, hideConsole);
   if (existingJava) {
+    const existingJavaMajor = readJavaMajorFromBinary(existingJava);
+    if (Number.isFinite(existingJavaMajor) && existingJavaMajor < javaMajor) {
+      try {
+        fs.rmSync(runtimeDir, { recursive: true, force: true });
+      } catch {
+      }
+      fs.mkdirSync(runtimeDir, { recursive: true });
+    } else {
+      return {
+        javaPath: existingJava,
+        javaMajor,
+        source: 'portable-cache'
+      };
+    }
+  }
+
+  const refreshedJava = findJavaBinary(runtimeDir, hideConsole);
+  if (refreshedJava) {
     return {
-      javaPath: existingJava,
+      javaPath: refreshedJava,
       javaMajor,
       source: 'portable-cache'
     };
@@ -460,6 +526,11 @@ async function ensurePortableJavaForVersion(version, versionType, hideConsole) {
   const javaPath = findJavaBinary(runtimeDir, hideConsole);
   if (!javaPath) {
     throw new Error(`Java portable introuvable après extraction (Java ${javaMajor}).`);
+  }
+
+  const detectedMajor = readJavaMajorFromBinary(javaPath);
+  if (Number.isFinite(detectedMajor) && detectedMajor < javaMajor) {
+    throw new Error(`Runtime Java portable invalide: version ${detectedMajor} détectée, Java ${javaMajor} requis.`);
   }
 
   return {
@@ -846,6 +917,387 @@ function fetchJson(url) {
   });
 }
 
+function fetchText(url) {
+  return new Promise((resolve, reject) => {
+    https.get(url, (response) => {
+      if (response.statusCode !== 200) {
+        reject(new Error(`HTTP ${response.statusCode}`));
+        response.resume();
+        return;
+      }
+
+      let raw = '';
+      response.setEncoding('utf8');
+      response.on('data', (chunk) => {
+        raw += chunk;
+      });
+      response.on('end', () => {
+        resolve(raw);
+      });
+    }).on('error', (error) => {
+      reject(error);
+    });
+  });
+}
+
+function parseMavenMetadataVersions(xmlText) {
+  if (typeof xmlText !== 'string' || !xmlText) {
+    return [];
+  }
+
+  const matches = [...xmlText.matchAll(/<version>([^<]+)<\/version>/g)];
+  return matches
+    .map((entry) => (entry && entry[1] ? String(entry[1]).trim() : ''))
+    .filter(Boolean);
+}
+
+function normalizeModloader(value) {
+  const raw = typeof value === 'string' ? value.trim().toLowerCase() : '';
+  if (['fabric', 'forge', 'neoforge'].includes(raw)) {
+    return raw;
+  }
+  return 'vanilla';
+}
+
+function getInstallerJavaPath(javaPath) {
+  if (typeof javaPath !== 'string') {
+    return 'java';
+  }
+
+  if (process.platform === 'win32' && javaPath.toLowerCase().endsWith('javaw.exe')) {
+    const cliCandidate = javaPath.slice(0, -9) + 'java.exe';
+    if (fs.existsSync(cliCandidate)) {
+      return cliCandidate;
+    }
+  }
+
+  return javaPath;
+}
+
+function runJavaProcess(javaPath, args, cwd) {
+  return new Promise((resolve, reject) => {
+    const child = spawn(javaPath, args, {
+      cwd,
+      windowsHide: true
+    });
+
+    let stdout = '';
+    child.stdout.on('data', (chunk) => {
+      stdout += chunk.toString();
+    });
+
+    let stderr = '';
+    child.stderr.on('data', (chunk) => {
+      stderr += chunk.toString();
+    });
+
+    child.on('error', reject);
+    child.on('close', (code) => {
+      if (code === 0) {
+        resolve();
+        return;
+      }
+
+      const details = [stderr.trim(), stdout.trim()].filter(Boolean).join('\n');
+      reject(new Error(details || `Processus Java terminé avec le code ${code}.`));
+    });
+  });
+}
+
+function sortVersionsDescending(values) {
+  return [...values].sort((a, b) => b.localeCompare(a, undefined, { numeric: true, sensitivity: 'base' }));
+}
+
+async function getFabricLoaderVersions(minecraftVersion) {
+  if (!minecraftVersion) {
+    return [];
+  }
+
+  const endpoint = `${FABRIC_META_BASE_URL}/versions/loader/${encodeURIComponent(minecraftVersion)}`;
+  const raw = await fetchJson(endpoint);
+  const versions = Array.isArray(raw)
+    ? raw.map((entry) => (entry && entry.loader && typeof entry.loader.version === 'string' ? entry.loader.version : null)).filter(Boolean)
+    : [];
+  return sortVersionsDescending([...new Set(versions)]);
+}
+
+async function getForgeVersionsForMinecraft(minecraftVersion) {
+  if (!minecraftVersion) {
+    return [];
+  }
+
+  const xml = await fetchText(FORGE_MAVEN_METADATA_URL);
+  const all = parseMavenMetadataVersions(xml);
+  const prefix = `${minecraftVersion}-`;
+  const filtered = all
+    .filter((entry) => entry.startsWith(prefix))
+    .map((entry) => entry.slice(prefix.length))
+    .filter(Boolean);
+  return sortVersionsDescending([...new Set(filtered)]);
+}
+
+async function getNeoForgeVersionsForMinecraft(minecraftVersion) {
+  const xml = await fetchText(NEOFORGE_MAVEN_METADATA_URL);
+  const all = parseMavenMetadataVersions(xml);
+
+  const match = typeof minecraftVersion === 'string'
+    ? minecraftVersion.match(/^1\.(\d+)(?:\.(\d+))?$/)
+    : null;
+
+  if (!match) {
+    return sortVersionsDescending([...new Set(all)]).slice(0, 120);
+  }
+
+  const minor = Number(match[1]);
+  const patch = Number(match[2] || 0);
+  const strictPrefix = `${minor}.${patch}.`;
+
+  // When patch is explicitly known (example: 1.20.1), only accept matching NeoForge branch (20.1.x).
+  const selected = all.filter((entry) => entry.startsWith(strictPrefix));
+  return sortVersionsDescending([...new Set(selected)]).slice(0, 120);
+}
+
+function findInstalledCustomVersionId(rootDir, matcher, options = {}) {
+  const requireJar = Boolean(options && options.requireJar);
+  const validateJson = Boolean(options && options.validateJson);
+  const versionsDir = path.join(rootDir, 'versions');
+  if (!fs.existsSync(versionsDir)) {
+    return null;
+  }
+
+  const entries = fs.readdirSync(versionsDir, { withFileTypes: true });
+  for (const entry of entries) {
+    if (!entry.isDirectory()) {
+      continue;
+    }
+
+    const id = entry.name;
+    if (!matcher(id)) {
+      continue;
+    }
+
+    const jsonPath = path.join(versionsDir, id, `${id}.json`);
+    const jarPath = path.join(versionsDir, id, `${id}.jar`);
+    const hasJson = fs.existsSync(jsonPath);
+    const hasJar = fs.existsSync(jarPath);
+
+    if (hasJson && validateJson) {
+      try {
+        const raw = fs.readFileSync(jsonPath, 'utf-8');
+        const parsed = JSON.parse(raw);
+        if (!parsed || typeof parsed !== 'object') {
+          continue;
+        }
+        const metadataLooksValid = typeof parsed.id === 'string' && parsed.id.trim();
+        if (!metadataLooksValid) {
+          continue;
+        }
+      } catch {
+        continue;
+      }
+    }
+
+    if (hasJson && (!requireJar || hasJar)) {
+      return id;
+    }
+  }
+
+  return null;
+}
+
+function removeInstalledCustomVersions(rootDir, matcher) {
+  const versionsDir = path.join(rootDir, 'versions');
+  if (!fs.existsSync(versionsDir)) {
+    return;
+  }
+
+  const entries = fs.readdirSync(versionsDir, { withFileTypes: true });
+  for (const entry of entries) {
+    if (!entry.isDirectory()) {
+      continue;
+    }
+
+    const id = entry.name;
+    if (!matcher(id)) {
+      continue;
+    }
+
+    const targetDir = path.join(versionsDir, id);
+    try {
+      fs.rmSync(targetDir, { recursive: true, force: true });
+    } catch {
+    }
+  }
+}
+
+function ensureLauncherProfilesFile(rootDir) {
+  const launcherProfilesPath = path.join(rootDir, 'launcher_profiles.json');
+  if (fs.existsSync(launcherProfilesPath)) {
+    return;
+  }
+
+  const placeholder = {
+    profiles: {},
+    settings: {},
+    version: 2
+  };
+
+  fs.writeFileSync(launcherProfilesPath, JSON.stringify(placeholder, null, 2), 'utf-8');
+}
+
+async function ensureFabricInstalled(rootDir, minecraftVersion, requestedLoaderVersion) {
+  const versions = await getFabricLoaderVersions(minecraftVersion);
+  if (!versions.length) {
+    throw new Error('Aucune version Fabric disponible pour cette version Minecraft.');
+  }
+
+  const resolvedLoaderVersion = requestedLoaderVersion && versions.includes(requestedLoaderVersion)
+    ? requestedLoaderVersion
+    : versions[0];
+  const profileJson = await fetchJson(`${FABRIC_META_BASE_URL}/versions/loader/${encodeURIComponent(minecraftVersion)}/${encodeURIComponent(resolvedLoaderVersion)}/profile/json`);
+  const customVersion = typeof profileJson.id === 'string' && profileJson.id
+    ? profileJson.id
+    : `fabric-loader-${resolvedLoaderVersion}-${minecraftVersion}`;
+
+  const targetDir = path.join(rootDir, 'versions', customVersion);
+  fs.mkdirSync(targetDir, { recursive: true });
+  fs.writeFileSync(path.join(targetDir, `${customVersion}.json`), JSON.stringify(profileJson, null, 2), 'utf-8');
+
+  return { customVersion, loaderVersion: resolvedLoaderVersion };
+}
+
+async function ensureForgeInstalled(javaPath, rootDir, minecraftVersion, requestedLoaderVersion) {
+  const versions = await getForgeVersionsForMinecraft(minecraftVersion);
+  if (!versions.length) {
+    throw new Error('Aucune version Forge disponible pour cette version Minecraft.');
+  }
+
+  const resolvedLoaderVersion = requestedLoaderVersion && versions.includes(requestedLoaderVersion)
+    ? requestedLoaderVersion
+    : versions[0];
+
+  const versionMatcher = (id) => id.includes(`forge-${resolvedLoaderVersion}`);
+  const alreadyInstalled = findInstalledCustomVersionId(rootDir, versionMatcher, { validateJson: true });
+  if (alreadyInstalled) {
+    return { customVersion: alreadyInstalled, loaderVersion: resolvedLoaderVersion };
+  }
+
+  removeInstalledCustomVersions(rootDir, versionMatcher);
+
+  const fullForgeVersion = `${minecraftVersion}-${resolvedLoaderVersion}`;
+  const installerUrl = `https://maven.minecraftforge.net/net/minecraftforge/forge/${fullForgeVersion}/forge-${fullForgeVersion}-installer.jar`;
+
+  ensureProfileDirectory(rootDir);
+  ensureLauncherProfilesFile(rootDir);
+
+  ensureModloadersRoot();
+  const installerPath = path.join(modloadersRoot(), `forge-${fullForgeVersion}-installer.jar`);
+  if (!fs.existsSync(installerPath)) {
+    await downloadFile(installerUrl, installerPath);
+  }
+
+  const cliJava = getInstallerJavaPath(javaPath);
+  const runAttempts = [
+    ['-jar', installerPath, '--installClient', rootDir],
+    ['-jar', installerPath, '--installClient']
+  ];
+
+  let installed = false;
+  let lastError = null;
+  for (const args of runAttempts) {
+    try {
+      await runJavaProcess(cliJava, args, rootDir);
+      installed = true;
+      break;
+    } catch (error) {
+      lastError = error;
+    }
+  }
+
+  if (!installed) {
+    const installedAfterFailure = findInstalledCustomVersionId(rootDir, versionMatcher, { validateJson: true });
+    if (installedAfterFailure) {
+      return { customVersion: installedAfterFailure, loaderVersion: resolvedLoaderVersion };
+    }
+
+    throw new Error(lastError && lastError.message ? lastError.message : 'Installation Forge échouée.');
+  }
+
+  const customVersion = findInstalledCustomVersionId(rootDir, versionMatcher, { validateJson: true });
+  if (!customVersion) {
+    throw new Error('Version Forge installée introuvable dans le dossier versions.');
+  }
+
+  return { customVersion, loaderVersion: resolvedLoaderVersion };
+}
+
+async function ensureNeoForgeInstalled(javaPath, rootDir, minecraftVersion, requestedLoaderVersion) {
+  const versions = await getNeoForgeVersionsForMinecraft(minecraftVersion);
+  if (!versions.length) {
+    throw new Error('Aucune version NeoForge disponible pour cette version Minecraft.');
+  }
+
+  const resolvedLoaderVersion = requestedLoaderVersion && versions.includes(requestedLoaderVersion)
+    ? requestedLoaderVersion
+    : versions[0];
+
+  const versionMatcher = (id) => id.toLowerCase().includes('neoforge') && id.includes(resolvedLoaderVersion);
+  const alreadyInstalled = findInstalledCustomVersionId(rootDir, versionMatcher, { validateJson: true });
+  const neoforgeLibDir = path.join(rootDir, 'libraries', 'net', 'neoforged', 'neoforge', resolvedLoaderVersion);
+  const neoforgeLibPresent = fs.existsSync(neoforgeLibDir) && fs.readdirSync(neoforgeLibDir).some(f => f.endsWith('.jar'));
+  if (alreadyInstalled && neoforgeLibPresent) {
+    return { customVersion: alreadyInstalled, loaderVersion: resolvedLoaderVersion };
+  }
+
+  removeInstalledCustomVersions(rootDir, versionMatcher);
+
+  const installerUrl = `https://maven.neoforged.net/releases/net/neoforged/neoforge/${resolvedLoaderVersion}/neoforge-${resolvedLoaderVersion}-installer.jar`;
+
+  ensureProfileDirectory(rootDir);
+  ensureLauncherProfilesFile(rootDir);
+
+  ensureModloadersRoot();
+  const installerPath = path.join(modloadersRoot(), `neoforge-${resolvedLoaderVersion}-installer.jar`);
+  if (!fs.existsSync(installerPath)) {
+    await downloadFile(installerUrl, installerPath);
+  }
+
+  const cliJava = getInstallerJavaPath(javaPath);
+  const runAttempts = [
+    ['-jar', installerPath, '--installClient', rootDir],
+    ['-jar', installerPath, '--install-client', rootDir],
+    ['-jar', installerPath, '--installClient']
+  ];
+
+  let installed = false;
+  let lastError = null;
+  for (const args of runAttempts) {
+    try {
+      await runJavaProcess(cliJava, args, rootDir);
+      installed = true;
+      break;
+    } catch (error) {
+      lastError = error;
+    }
+  }
+
+  if (!installed) {
+    const installedAfterFailure = findInstalledCustomVersionId(rootDir, versionMatcher, { validateJson: true });
+    if (installedAfterFailure) {
+      return { customVersion: installedAfterFailure, loaderVersion: resolvedLoaderVersion };
+    }
+
+    throw new Error(lastError && lastError.message ? lastError.message : 'Installation NeoForge échouée.');
+  }
+
+  const customVersion = findInstalledCustomVersionId(rootDir, versionMatcher, { validateJson: true });
+  if (!customVersion) {
+    throw new Error('Version NeoForge installée introuvable dans le dossier versions.');
+  }
+
+  return { customVersion, loaderVersion: resolvedLoaderVersion };
+}
+
 async function ensureMicrosoftSession(preferredAccountId) {
   if (microsoftAuth && (!preferredAccountId || preferredAccountId === microsoftAccountId)) {
     return true;
@@ -954,7 +1406,9 @@ ipcMain.handle('launcher:start', async (_, payload) => {
     disableGameConsole,
     closeLauncherOnStart,
     accountId,
-    gameDirectory
+    gameDirectory,
+    modloader,
+    modloaderVersion
   } = payload;
 
   if (!version) {
@@ -991,13 +1445,18 @@ ipcMain.handle('launcher:start', async (_, payload) => {
   ensureProfileDirectory(minecraftDirectory);
   const authorization = normalizeAuthorizationForLaunch(microsoftAuth);
   const trimmedVersion = version.trim();
+  const selectedModloader = normalizeModloader(modloader);
+  const requestedLoaderVersion = typeof modloaderVersion === 'string' ? modloaderVersion.trim() : '';
+  const effectiveRoot = minecraftDirectory;
 
   const launchOptions = {
     authorization,
-    root: minecraftDirectory,
+    root: effectiveRoot,
     javaPath: javaRuntime.javaPath,
     overrides: {
-      detached: true
+      detached: true,
+      cwd: minecraftDirectory,
+      gameDirectory: minecraftDirectory
     },
     version: {
       number: trimmedVersion,
@@ -1009,6 +1468,155 @@ ipcMain.handle('launcher:start', async (_, payload) => {
     },
     forge: null
   };
+
+  if (selectedModloader !== 'vanilla') {
+    try {
+      sendLog(`[modloader] Préparation ${selectedModloader}...`);
+
+      let result;
+      if (selectedModloader === 'fabric') {
+        result = await ensureFabricInstalled(effectiveRoot, trimmedVersion, requestedLoaderVersion || null);
+      } else if (selectedModloader === 'forge') {
+        result = await ensureForgeInstalled(javaRuntime.javaPath, effectiveRoot, trimmedVersion, requestedLoaderVersion || null);
+      } else {
+        result = await ensureNeoForgeInstalled(javaRuntime.javaPath, effectiveRoot, trimmedVersion, requestedLoaderVersion || null);
+      }
+
+      launchOptions.version.custom = result.customVersion;
+
+      if (selectedModloader === 'forge' || selectedModloader === 'neoforge') {
+        try {
+          const customVersionJsonPath = path.join(effectiveRoot, 'versions', result.customVersion, `${result.customVersion}.json`);
+          const customVersionJson = JSON.parse(fs.readFileSync(customVersionJsonPath, 'utf-8'));
+          const inheritedVersion = typeof customVersionJson.inheritsFrom === 'string'
+            ? customVersionJson.inheritsFrom.trim()
+            : '';
+
+          if (inheritedVersion) {
+            const runtimeForInherited = await ensurePortableJavaForVersion(inheritedVersion, resolvedVersionType, hideConsole);
+            launchOptions.javaPath = runtimeForInherited.javaPath;
+            launchOptions.version.number = inheritedVersion;
+            javaRuntime = runtimeForInherited;
+            sendLog(`[java] Runtime ajusté pour ${selectedModloader}: Java ${runtimeForInherited.javaMajor} (${inheritedVersion}).`);
+          }
+        } catch {
+        }
+      }
+
+      if (selectedModloader === 'neoforge' || selectedModloader === 'forge') {
+        const libraryDir = path.join(effectiveRoot, 'libraries').replace(/\\/g, '/');
+        const classpathSeparator = process.platform === 'win32' ? ';' : ':';
+        const versionName = result.customVersion || trimmedVersion;
+        const customVersionJsonPath = path.join(effectiveRoot, 'versions', result.customVersion, `${result.customVersion}.json`);
+        const extraJvmArgs = [];
+        try {
+          const versionJson = JSON.parse(fs.readFileSync(customVersionJsonPath, 'utf-8'));
+          const rawJvmArgs = Array.isArray(versionJson.arguments && versionJson.arguments.jvm)
+            ? versionJson.arguments.jvm
+            : [];
+
+          const flattenedJvmArgs = [];
+          for (const entry of rawJvmArgs) {
+            if (typeof entry === 'string') {
+              flattenedJvmArgs.push(entry);
+              continue;
+            }
+
+            if (!entry || typeof entry !== 'object') {
+              continue;
+            }
+
+            const value = entry.value;
+            if (typeof value === 'string') {
+              flattenedJvmArgs.push(value);
+              continue;
+            }
+
+            if (Array.isArray(value)) {
+              for (const valueEntry of value) {
+                if (typeof valueEntry === 'string') {
+                  flattenedJvmArgs.push(valueEntry);
+                }
+              }
+            }
+          }
+
+          const normalizedJvmArgs = [];
+          for (const arg of flattenedJvmArgs) {
+            const normalizedArg = arg
+              .replace(/\$\{library_directory\}/g, libraryDir)
+              .replace(/\$\{classpath_separator\}/g, classpathSeparator)
+              .replace(/\$\{version_name\}/g, versionName);
+            // Keep only fully resolved args to avoid invalid path errors at JVM startup.
+            if (normalizedArg.includes('${')) continue;
+            normalizedJvmArgs.push(normalizedArg);
+          }
+
+          const optionsExpectingValue = new Set([
+            '--add-opens',
+            '--add-exports',
+            '--add-reads',
+            '--add-modules',
+            '--module-path',
+            '-p',
+            '-classpath',
+            '-cp'
+          ]);
+
+          for (let index = 0; index < normalizedJvmArgs.length; index += 1) {
+            const currentArg = normalizedJvmArgs[index];
+
+            if (optionsExpectingValue.has(currentArg)) {
+              const valueArg = normalizedJvmArgs[index + 1];
+              if (typeof valueArg === 'string' && valueArg.trim()) {
+                extraJvmArgs.push(currentArg, valueArg);
+                index += 1;
+              }
+              continue;
+            }
+
+            // Drop standalone "module/package=target" entries when the option is missing.
+            if (/^[a-zA-Z0-9_.]+\/[a-zA-Z0-9_.]+=[^\s]+$/.test(currentArg)) {
+              continue;
+            }
+
+            extraJvmArgs.push(currentArg);
+          }
+        } catch {
+          extraJvmArgs.push('-Djava.net.preferIPv6Addresses=system');
+          extraJvmArgs.push(`-DlibraryDirectory=${libraryDir}`);
+          extraJvmArgs.push('--add-opens');
+          extraJvmArgs.push('java.base/java.lang.invoke=ALL-UNNAMED');
+          extraJvmArgs.push('--add-exports');
+          extraJvmArgs.push('jdk.naming.dns/com.sun.jndi.dns=java.naming');
+        }
+        if (!extraJvmArgs.some(arg => arg.startsWith('-DlibraryDirectory='))) {
+          extraJvmArgs.push(`-DlibraryDirectory=${libraryDir}`);
+        }
+
+        // Deduplicate only JVM system properties; repeated flags like --add-opens are valid.
+        const seenProperties = new Set();
+        launchOptions.customArgs = extraJvmArgs.filter((arg) => {
+          if (!arg.startsWith('-D')) {
+            return true;
+          }
+
+          const propertyKey = arg.split('=')[0];
+          if (seenProperties.has(propertyKey)) {
+            return false;
+          }
+
+          seenProperties.add(propertyKey);
+          return true;
+        });
+      }
+
+      sendLog(`[modloader] ${selectedModloader} prêt (${result.loaderVersion}).`);
+    } catch (error) {
+      const message = error && error.message ? error.message : String(error);
+      return { ok: false, message: `Impossible de préparer ${selectedModloader}: ${message}` };
+    }
+  }
 
   sendLog(hideConsole
     ? '[launcher] Console Java désactivée (javaw).'
@@ -1109,6 +1717,40 @@ ipcMain.handle('launcher:versions', async (_, options) => {
   }
 });
 
+ipcMain.handle('launcher:modloader-versions', async (_, options) => {
+  const selectedModloader = normalizeModloader(options && options.modloader);
+  const minecraftVersion = options && typeof options.minecraftVersion === 'string'
+    ? options.minecraftVersion.trim()
+    : '';
+
+  if (!minecraftVersion || selectedModloader === 'vanilla') {
+    return { ok: true, versions: [] };
+  }
+
+  try {
+    let versions = [];
+    if (selectedModloader === 'fabric') {
+      versions = await getFabricLoaderVersions(minecraftVersion);
+    } else if (selectedModloader === 'forge') {
+      versions = await getForgeVersionsForMinecraft(minecraftVersion);
+    } else if (selectedModloader === 'neoforge') {
+      versions = await getNeoForgeVersionsForMinecraft(minecraftVersion);
+    }
+
+    return {
+      ok: true,
+      versions
+    };
+  } catch (error) {
+    const message = error && error.message ? error.message : String(error);
+    return {
+      ok: false,
+      message: `Impossible de récupérer les versions ${selectedModloader}: ${message}`,
+      versions: []
+    };
+  }
+});
+
 ipcMain.handle('launcher:open-game-folder', async (_, targetPathArg) => {
   try {
     const store = readProfilesStore();
@@ -1183,6 +1825,8 @@ ipcMain.handle('profiles:create', async (_, requestedName) => {
     id,
     name: profileName,
     version: '',
+    modloader: 'vanilla',
+    modloaderVersion: '',
     gameDirectory
   };
 
@@ -1211,6 +1855,17 @@ ipcMain.handle('profiles:update', async (_, payload) => {
 
   if (typeof payload?.version === 'string') {
     profile.version = payload.version.trim();
+  }
+
+  if (typeof payload?.modloader === 'string') {
+    profile.modloader = normalizeModloader(payload.modloader);
+    if (profile.modloader === 'vanilla') {
+      profile.modloaderVersion = '';
+    }
+  }
+
+  if (typeof payload?.modloaderVersion === 'string') {
+    profile.modloaderVersion = payload.modloaderVersion.trim();
   }
 
   if (typeof payload?.gameDirectory === 'string') {

@@ -15,6 +15,7 @@ Launcher Minecraft Java Edition base sur Electron, avec connexion Microsoft et g
 - Gestion de plusieurs comptes Microsoft
 - Selection du compte actif depuis l'interface
 - Recuperation automatique des versions `release` et `snapshot` Minecraft officielles
+- Prend en charge les modloaders (Fabric,Forge,Neoforge)
 - Lancement du jeu via `minecraft-launcher-core`
 - Choix de la RAM max (4 Go, 8 Go, 16 Go)
 - Option pour desactiver la console Java (`javaw`)
