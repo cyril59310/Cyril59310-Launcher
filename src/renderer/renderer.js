@@ -35,6 +35,7 @@ const versionEl = document.getElementById('version');
 const launchAdvancedDetailsEl = document.getElementById('launchAdvancedDetails');
 const modloaderEl = document.getElementById('modloader');
 const modloaderVersionEl = document.getElementById('modloaderVersion');
+const launchArgumentsEl = document.getElementById('launchArguments');
 const updateStatusEl = document.getElementById('updateStatus');
 const checkUpdateBtn = document.getElementById('checkUpdateBtn');
 const installUpdateBtn = document.getElementById('installUpdateBtn');
@@ -53,6 +54,14 @@ const VERSION_STORAGE_KEY = 'launcher.gameVersion';
 const SNAPSHOTS_STORAGE_KEY = 'launcher.includeSnapshots';
 const MODLOADER_STORAGE_KEY = 'launcher.modloader';
 const MODLOADER_VERSION_STORAGE_KEY = 'launcher.modloaderVersion';
+
+const normalizeLaunchArguments = (value) => {
+  if (typeof value !== 'string') {
+    return '';
+  }
+
+  return value.trim().slice(0, 2000);
+};
 
 let availableVersions = [];
 let updateReady = false;
@@ -325,6 +334,9 @@ const applyActiveProfileToForm = () => {
     if (activeProfileLabelEl) {
       activeProfileLabelEl.textContent = 'Aucun profil';
     }
+    if (launchArgumentsEl) {
+      launchArgumentsEl.value = '';
+    }
     updateActiveModloaderLabel('vanilla');
     return null;
   }
@@ -339,6 +351,10 @@ const applyActiveProfileToForm = () => {
 
   if (activeProfileLabelEl) {
     activeProfileLabelEl.textContent = profile.name || 'Profil';
+  }
+
+  if (launchArgumentsEl) {
+    launchArgumentsEl.value = normalizeLaunchArguments(profile.launchArguments || '');
   }
 
   updateActiveModloaderLabel(profile.modloader || (modloaderEl ? modloaderEl.value : 'vanilla'));
@@ -358,7 +374,10 @@ const persistActiveProfile = async ({ showStatus = false } = {}) => {
     name: profileNameEl ? profileNameEl.value : profile.name,
     gameDirectory: profileGameDirectoryEl ? profileGameDirectoryEl.value : profile.gameDirectory,
     modloader: modloaderEl ? modloaderEl.value : (profile.modloader || 'vanilla'),
-    modloaderVersion: modloaderVersionEl ? modloaderVersionEl.value : (profile.modloaderVersion || '')
+    modloaderVersion: modloaderVersionEl ? modloaderVersionEl.value : (profile.modloaderVersion || ''),
+    launchArguments: launchArgumentsEl
+      ? normalizeLaunchArguments(launchArgumentsEl.value)
+      : normalizeLaunchArguments(profile.launchArguments || '')
   };
 
   const result = await window.mcLauncher.updateProfile(payload);
@@ -907,6 +926,13 @@ if (modloaderVersionEl) {
   });
 }
 
+if (launchArgumentsEl) {
+  launchArgumentsEl.addEventListener('change', () => {
+    launchArgumentsEl.value = normalizeLaunchArguments(launchArgumentsEl.value);
+    void persistActiveProfile();
+  });
+}
+
 includeSnapshotsEl.addEventListener('change', () => {
   localStorage.setItem(SNAPSHOTS_STORAGE_KEY, includeSnapshotsEl.checked ? '1' : '0');
   void loadVersions(versionEl.value || localStorage.getItem(VERSION_STORAGE_KEY));
@@ -925,7 +951,8 @@ launchForm.addEventListener('submit', async (event) => {
     accountId: msAccountSelectEl.value || null,
     gameDirectory: profileGameDirectoryEl ? profileGameDirectoryEl.value : null,
     modloader: modloaderEl ? modloaderEl.value : 'vanilla',
-    modloaderVersion: modloaderVersionEl ? modloaderVersionEl.value : ''
+    modloaderVersion: modloaderVersionEl ? modloaderVersionEl.value : '',
+    launchArguments: launchArgumentsEl ? normalizeLaunchArguments(launchArgumentsEl.value) : ''
   };
 
   localStorage.setItem(RAM_STORAGE_KEY, String(payload.memoryMb));
@@ -943,7 +970,8 @@ launchForm.addEventListener('submit', async (event) => {
         setActive: true,
         version: payload.version,
         modloader: payload.modloader,
-        modloaderVersion: payload.modloaderVersion
+        modloaderVersion: payload.modloaderVersion,
+        launchArguments: payload.launchArguments
       });
 
       if (profileUpdate && profileUpdate.ok) {

@@ -426,6 +426,10 @@ button:disabled {
   gap: 12px;
 }
 
+.advanced-launch-full {
+  grid-column: 1 / -1;
+}
+
 .advanced-launch-block .checkbox-row {
   margin-top: 10px;
 }

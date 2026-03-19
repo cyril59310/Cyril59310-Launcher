@@ -72,6 +72,69 @@ function normalizeGameDirectoryPath(value) {
   return path.normalize(path.resolve(raw));
 }
 
+function normalizeLaunchArguments(value) {
+  if (typeof value !== 'string') {
+    return '';
+  }
+
+  return value.trim().slice(0, 2000);
+}
+
+function parseLaunchArguments(raw) {
+  const input = normalizeLaunchArguments(raw);
+  if (!input) {
+    return [];
+  }
+
+  const args = [];
+  let current = '';
+  let quoteChar = '';
+  let escapeNext = false;
+
+  for (const char of input) {
+    if (escapeNext) {
+      current += char;
+      escapeNext = false;
+      continue;
+    }
+
+    if (char === '\\') {
+      escapeNext = true;
+      continue;
+    }
+
+    if (quoteChar) {
+      if (char === quoteChar) {
+        quoteChar = '';
+      } else {
+        current += char;
+      }
+      continue;
+    }
+
+    if (char === '"' || char === "'") {
+      quoteChar = char;
+      continue;
+    }
+
+    if (/\s/.test(char)) {
+      if (current) {
+        args.push(current);
+        current = '';
+      }
+      continue;
+    }
+
+    current += char;
+  }
+
+  if (current) {
+    args.push(current);
+  }
+
+  return args;
+}
+
 function createDefaultProfilesStore() {
   return {
     activeProfileId: 'default',
@@ -81,6 +144,7 @@ function createDefaultProfilesStore() {
       version: '',
       modloader: 'vanilla',
       modloaderVersion: '',
+      launchArguments: '',
       gameDirectory: defaultGameDirectory()
     }]
   };
@@ -98,6 +162,7 @@ function normalizeProfilesStore(store) {
         version: typeof entry.version === 'string' ? entry.version.trim() : '',
         modloader: normalizeModloader(entry.modloader),
         modloaderVersion: typeof entry.modloaderVersion === 'string' ? entry.modloaderVersion.trim() : '',
+        launchArguments: normalizeLaunchArguments(entry.launchArguments),
         gameDirectory: normalizeGameDirectoryPath(entry.gameDirectory) || defaultGameDirectory()
       }))
     : [];
@@ -165,6 +230,7 @@ function publicProfiles(store) {
     version: entry.version,
     modloader: entry.modloader,
     modloaderVersion: entry.modloaderVersion,
+    launchArguments: entry.launchArguments,
     gameDirectory: entry.gameDirectory
   }));
 }
@@ -1408,7 +1474,8 @@ ipcMain.handle('launcher:start', async (_, payload) => {
     accountId,
     gameDirectory,
     modloader,
-    modloaderVersion
+    modloaderVersion,
+    launchArguments
   } = payload;
 
   if (!version) {
@@ -1447,6 +1514,7 @@ ipcMain.handle('launcher:start', async (_, payload) => {
   const trimmedVersion = version.trim();
   const selectedModloader = normalizeModloader(modloader);
   const requestedLoaderVersion = typeof modloaderVersion === 'string' ? modloaderVersion.trim() : '';
+  const userLaunchArgs = parseLaunchArguments(launchArguments);
   const effectiveRoot = minecraftDirectory;
 
   const launchOptions = {
@@ -1616,6 +1684,11 @@ ipcMain.handle('launcher:start', async (_, payload) => {
       const message = error && error.message ? error.message : String(error);
       return { ok: false, message: `Impossible de préparer ${selectedModloader}: ${message}` };
     }
+  }
+
+  if (userLaunchArgs.length) {
+    launchOptions.customArgs = [...(Array.isArray(launchOptions.customArgs) ? launchOptions.customArgs : []), ...userLaunchArgs];
+    sendLog(`[launcher] Arguments de démarrage personnalisés: ${userLaunchArgs.join(' ')}`);
   }
 
   sendLog(hideConsole
@@ -1827,6 +1900,7 @@ ipcMain.handle('profiles:create', async (_, requestedName) => {
     version: '',
     modloader: 'vanilla',
     modloaderVersion: '',
+    launchArguments: '',
     gameDirectory
   };
 
@@ -1866,6 +1940,10 @@ ipcMain.handle('profiles:update', async (_, payload) => {
 
   if (typeof payload?.modloaderVersion === 'string') {
     profile.modloaderVersion = payload.modloaderVersion.trim();
+  }
+
+  if (typeof payload?.launchArguments === 'string') {
+    profile.launchArguments = normalizeLaunchArguments(payload.launchArguments);
   }
 
   if (typeof payload?.gameDirectory === 'string') {

@@ -24,6 +24,7 @@ Launcher Minecraft Java Edition base sur Electron, avec connexion Microsoft et g
 - Téléchargement automatique de la bonne version de Java
 - Mise a jour automatique du launcher depuis GitHub Releases (hors mode dev et hors build portable)
 - Prend en charge les profils pour isoler les instances
+- Prend en charge les arguments JVM
 
 ## Stack technique
 
