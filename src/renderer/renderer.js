@@ -632,6 +632,17 @@ if (profileSettingsWindow) {
   });
 }
 
+document.addEventListener('click', (event) => {
+  if (!launchAdvancedDetailsEl || !launchAdvancedDetailsEl.open) {
+    return;
+  }
+
+  const target = event.target;
+  if (target instanceof Node && !launchAdvancedDetailsEl.contains(target)) {
+    launchAdvancedDetailsEl.open = false;
+  }
+});
+
 document.addEventListener('keydown', (event) => {
   if (event.key === 'Escape' && settingsModal.classList.contains('is-open')) {
     setSettingsModalOpen(false);
