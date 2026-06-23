@@ -301,9 +301,9 @@ function getJavaMajorForVersion(version, versionType) {
   return 21;
 }
 
-function getJavaBinaryRelativePath(useWindowlessBinary) {
+function getJavaBinaryRelativePath() {
   if (process.platform === 'win32') {
-    return useWindowlessBinary ? path.join('bin', 'javaw.exe') : path.join('bin', 'java.exe');
+    return path.join('bin', 'java.exe');
   }
 
   return path.join('bin', 'java');
@@ -414,20 +414,14 @@ function extractZipWithPowerShell(zipPath, outputDir) {
   });
 }
 
-function findJavaBinary(baseDir, useWindowlessBinary) {
-  const preferred = getJavaBinaryRelativePath(useWindowlessBinary);
-  const fallback = getJavaBinaryRelativePath(false);
+function findJavaBinary(baseDir) {
+  const javaBinary = getJavaBinaryRelativePath();
   const maxDepth = 5;
 
   function walk(currentDir, depth) {
-    const preferredCandidate = path.join(currentDir, preferred);
-    if (fs.existsSync(preferredCandidate)) {
-      return preferredCandidate;
-    }
-
-    const fallbackCandidate = path.join(currentDir, fallback);
-    if (fs.existsSync(fallbackCandidate)) {
-      return fallbackCandidate;
+    const candidate = path.join(currentDir, javaBinary);
+    if (fs.existsSync(candidate)) {
+      return candidate;
     }
 
     if (depth >= maxDepth) {
@@ -485,12 +479,12 @@ function readJavaMajorFromBinary(javaPath) {
   }
 }
 
-async function ensurePortableJavaForVersion(version, versionType, hideConsole) {
+async function ensurePortableJavaForVersion(version, versionType) {
   const javaMajor = await resolveRequiredJavaMajor(version, versionType);
 
   if (process.platform !== 'win32') {
     return {
-      javaPath: hideConsole ? 'javaw' : 'java',
+      javaPath: 'java',
       javaMajor,
       source: 'system'
     };
@@ -501,7 +495,7 @@ async function ensurePortableJavaForVersion(version, versionType, hideConsole) {
   const runtimeDir = path.join(runtimesRoot(), `java-${javaMajor}`);
   fs.mkdirSync(runtimeDir, { recursive: true });
 
-  const existingJava = findJavaBinary(runtimeDir, hideConsole);
+  const existingJava = findJavaBinary(runtimeDir);
   if (existingJava) {
     const existingJavaMajor = readJavaMajorFromBinary(existingJava);
     if (Number.isFinite(existingJavaMajor) && existingJavaMajor < javaMajor) {
@@ -519,7 +513,7 @@ async function ensurePortableJavaForVersion(version, versionType, hideConsole) {
     }
   }
 
-  const refreshedJava = findJavaBinary(runtimeDir, hideConsole);
+  const refreshedJava = findJavaBinary(runtimeDir);
   if (refreshedJava) {
     return {
       javaPath: refreshedJava,
@@ -531,7 +525,7 @@ async function ensurePortableJavaForVersion(version, versionType, hideConsole) {
   const downloadUrls = getPortableJavaApiUrls(javaMajor);
   if (!downloadUrls.length) {
     return {
-      javaPath: hideConsole ? 'javaw' : 'java',
+      javaPath: 'java',
       javaMajor,
       source: 'system-fallback'
     };
@@ -589,7 +583,7 @@ async function ensurePortableJavaForVersion(version, versionType, hideConsole) {
       : `Impossible de télécharger Java ${javaMajor}.`);
   }
 
-  const javaPath = findJavaBinary(runtimeDir, hideConsole);
+  const javaPath = findJavaBinary(runtimeDir);
   if (!javaPath) {
     throw new Error(`Java portable introuvable après extraction (Java ${javaMajor}).`);
   }
@@ -1469,7 +1463,6 @@ ipcMain.handle('launcher:start', async (_, payload) => {
     version,
     versionType,
     memoryMb,
-    disableGameConsole,
     closeLauncherOnStart,
     accountId,
     gameDirectory,
@@ -1489,7 +1482,6 @@ ipcMain.handle('launcher:start', async (_, payload) => {
 
   const safeMemoryMb = Number(memoryMb);
   const maxMemoryMb = Number.isFinite(safeMemoryMb) && safeMemoryMb >= 1024 ? safeMemoryMb : 2048;
-  const hideConsole = Boolean(disableGameConsole);
   const shouldCloseLauncher = Boolean(closeLauncherOnStart);
   const allowedVersionTypes = new Set(['release', 'snapshot', 'old_alpha', 'old_beta']);
   const resolvedVersionType = typeof versionType === 'string' && allowedVersionTypes.has(versionType)
@@ -1499,7 +1491,7 @@ ipcMain.handle('launcher:start', async (_, payload) => {
   let javaRuntime;
   try {
     sendLog('[java] Vérification du runtime Java portable...');
-    javaRuntime = await ensurePortableJavaForVersion(version.trim(), resolvedVersionType, hideConsole);
+    javaRuntime = await ensurePortableJavaForVersion(version.trim(), resolvedVersionType);
     sendLog(`[java] Java ${javaRuntime.javaMajor} prêt (${javaRuntime.source}).`);
   } catch (error) {
     const message = error && error.message ? error.message : String(error);
@@ -1561,7 +1553,7 @@ ipcMain.handle('launcher:start', async (_, payload) => {
             : '';
 
           if (inheritedVersion) {
-            const runtimeForInherited = await ensurePortableJavaForVersion(inheritedVersion, resolvedVersionType, hideConsole);
+            const runtimeForInherited = await ensurePortableJavaForVersion(inheritedVersion, resolvedVersionType);
             launchOptions.javaPath = runtimeForInherited.javaPath;
             launchOptions.version.number = inheritedVersion;
             javaRuntime = runtimeForInherited;
@@ -1691,9 +1683,6 @@ ipcMain.handle('launcher:start', async (_, payload) => {
     sendLog(`[launcher] Arguments de démarrage personnalisés: ${userLaunchArgs.join(' ')}`);
   }
 
-  sendLog(hideConsole
-    ? '[launcher] Console Java désactivée (javaw).'
-    : '[launcher] Console Java activée (java).');
   if (shouldCloseLauncher) {
     sendLog('[launcher] Le launcher se fermera après le démarrage du jeu.');
   }

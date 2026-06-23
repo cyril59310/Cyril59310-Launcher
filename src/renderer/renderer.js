@@ -6,7 +6,6 @@ const statusEl = document.getElementById('status');
 const progressEl = document.getElementById('progress');
 const progressFillEl = document.getElementById('progressFill');
 const memoryEl = document.getElementById('memoryMb');
-const disableGameConsoleEl = document.getElementById('disableGameConsole');
 const closeLauncherOnStartEl = document.getElementById('closeLauncherOnStart');
 const includeSnapshotsEl = document.getElementById('includeSnapshots');
 const profileSelectEl = document.getElementById('profileSelect');
@@ -49,7 +48,6 @@ const authorGithubLinkEl = document.getElementById('authorGithubLink');
 let microsoftConnected = false;
 let microsoftSessionRestoring = false;
 const RAM_STORAGE_KEY = 'launcher.memoryMb';
-const CONSOLE_STORAGE_KEY = 'launcher.disableGameConsole';
 const CLOSE_LAUNCHER_STORAGE_KEY = 'launcher.closeOnStart';
 const VERSION_STORAGE_KEY = 'launcher.gameVersion';
 const SNAPSHOTS_STORAGE_KEY = 'launcher.includeSnapshots';
@@ -977,7 +975,6 @@ launchForm.addEventListener('submit', async (event) => {
     version: String(formData.get('version') || ''),
     versionType: availableVersions.find((entry) => entry.id === String(formData.get('version') || ''))?.type || 'release',
     memoryMb: Number(formData.get('memoryMb') || 2048),
-    disableGameConsole: disableGameConsoleEl.checked,
     closeLauncherOnStart: closeLauncherOnStartEl.checked,
     accountId: msAccountSelectEl.value || null,
     gameDirectory: profileGameDirectoryEl ? profileGameDirectoryEl.value : null,
@@ -987,7 +984,6 @@ launchForm.addEventListener('submit', async (event) => {
   };
 
   localStorage.setItem(RAM_STORAGE_KEY, String(payload.memoryMb));
-  localStorage.setItem(CONSOLE_STORAGE_KEY, payload.disableGameConsole ? '1' : '0');
   localStorage.setItem(CLOSE_LAUNCHER_STORAGE_KEY, payload.closeLauncherOnStart ? '1' : '0');
   localStorage.setItem(VERSION_STORAGE_KEY, payload.version);
   localStorage.setItem(MODLOADER_STORAGE_KEY, payload.modloader || 'vanilla');
@@ -1093,11 +1089,6 @@ const restoreRamPreference = () => {
   if (optionExists) {
     memoryEl.value = saved;
   }
-};
-
-const restoreConsolePreference = () => {
-  const saved = localStorage.getItem(CONSOLE_STORAGE_KEY);
-  disableGameConsoleEl.checked = saved === '1';
 };
 
 const restoreCloseLauncherPreference = () => {
@@ -1299,7 +1290,6 @@ const loadLauncherVersion = async () => {
 };
 
 restoreRamPreference();
-restoreConsolePreference();
 restoreCloseLauncherPreference();
 restoreSnapshotPreference();
 restoreModloaderPreference();
