@@ -47,6 +47,7 @@ const launcherVersionEl = document.getElementById('launcherVersion');
 const authorGithubLinkEl = document.getElementById('authorGithubLink');
 
 let microsoftConnected = false;
+let microsoftSessionRestoring = false;
 const RAM_STORAGE_KEY = 'launcher.memoryMb';
 const CONSOLE_STORAGE_KEY = 'launcher.disableGameConsole';
 const CLOSE_LAUNCHER_STORAGE_KEY = 'launcher.closeOnStart';
@@ -398,6 +399,24 @@ const persistActiveProfile = async ({ showStatus = false } = {}) => {
   return true;
 };
 
+const updateLaunchButtonState = () => {
+  if (!launchBtn) {
+    return;
+  }
+
+  const hasSelectedAccount = Boolean(msAccountSelectEl && msAccountSelectEl.value);
+  const shouldDisableLaunch = microsoftSessionRestoring || !microsoftConnected || !hasSelectedAccount;
+
+  launchBtn.disabled = shouldDisableLaunch;
+  launchBtn.title = microsoftSessionRestoring
+    ? 'Restauration du compte Microsoft en cours...'
+    : (!microsoftConnected
+      ? 'Connecte un compte Microsoft avant de lancer Minecraft.'
+      : (!hasSelectedAccount
+        ? 'Sélectionne un compte Microsoft avant de lancer Minecraft.'
+        : ''));
+};
+
 const setMicrosoftConnected = (connected, profileName) => {
   microsoftConnected = connected;
   if (msStatusEl) {
@@ -411,6 +430,13 @@ const setMicrosoftConnected = (connected, profileName) => {
       accountIdentityEl.classList.add('is-offline');
     }
   }
+
+  updateLaunchButtonState();
+};
+
+const setMicrosoftSessionRestoring = (restoring) => {
+  microsoftSessionRestoring = restoring;
+  updateLaunchButtonState();
 };
 
 const renderAccounts = (accounts, activeAccountId) => {
@@ -427,6 +453,7 @@ const renderAccounts = (accounts, activeAccountId) => {
     msAccountSelectEl.disabled = true;
     msLogoutBtn.disabled = true;
     hideAccountIdentity();
+    updateLaunchButtonState();
     return;
   }
 
@@ -443,6 +470,7 @@ const renderAccounts = (accounts, activeAccountId) => {
   msAccountSelectEl.disabled = false;
   msLogoutBtn.disabled = false;
   renderAccountIdentity();
+  updateLaunchButtonState();
 };
 
 const applyAccountResponse = (result) => {
@@ -753,9 +781,11 @@ msAccountSelectEl.addEventListener('change', async () => {
   const targetAccountId = msAccountSelectEl.value;
   if (!targetAccountId) {
     hideAccountIdentity();
+    updateLaunchButtonState();
     return;
   }
 
+  setMicrosoftSessionRestoring(true);
   msAccountSelectEl.disabled = true;
   statusEl.textContent = 'Changement de compte...';
 
@@ -774,6 +804,7 @@ msAccountSelectEl.addEventListener('change', async () => {
     appendLog(`[auth:error] ${message}`);
   } finally {
     msAccountSelectEl.disabled = false;
+    setMicrosoftSessionRestoring(false);
   }
 });
 
@@ -1030,6 +1061,8 @@ openGameFolderBtn.addEventListener('click', async () => {
 });
 
 const tryRestoreMicrosoftSession = async () => {
+  setMicrosoftSessionRestoring(true);
+
   try {
     const result = await window.mcLauncher.microsoftRestore();
     applyAccountResponse(result);
@@ -1045,6 +1078,8 @@ const tryRestoreMicrosoftSession = async () => {
       statusEl.textContent = 'Sélectionne un compte Microsoft pour continuer.';
     }
   } catch {
+  } finally {
+    setMicrosoftSessionRestoring(false);
   }
 };
 
@@ -1268,6 +1303,7 @@ restoreConsolePreference();
 restoreCloseLauncherPreference();
 restoreSnapshotPreference();
 restoreModloaderPreference();
+updateLaunchButtonState();
 setProgress(0, 'Progression: 0%');
 
 const initializeRenderer = async () => {
