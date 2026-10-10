@@ -1054,6 +1054,10 @@ launchForm.addEventListener('submit', async (event) => {
   }
 });
 
+closeLauncherOnStartEl.addEventListener('change', () => {
+  localStorage.setItem(CLOSE_LAUNCHER_STORAGE_KEY, closeLauncherOnStartEl.checked ? '1' : '0');
+});
+
 openGameFolderBtn.addEventListener('click', async () => {
   openGameFolderBtn.disabled = true;
 
