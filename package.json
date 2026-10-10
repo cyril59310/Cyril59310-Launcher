@@ -6,7 +6,8 @@
   "scripts": {
     "start": "electron .",
     "build": "electron-builder --win nsis",
-    "build:portable": "electron-builder --win portable"
+    "build:portable": "electron-builder --win portable",
+    "release": "node -e \"const {version}=require('./package.json'); const {execFileSync}=require('node:child_process'); const tag='v'+version; execFileSync('git',['tag',tag],{stdio:'inherit'}); execFileSync('git',['push','origin',tag],{stdio:'inherit'});\""
   },
   "keywords": [
     "minecraft",
