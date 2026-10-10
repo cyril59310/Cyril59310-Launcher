@@ -5,7 +5,7 @@ const logsEl = document.getElementById('logs');
 const statusEl = document.getElementById('status');
 const progressEl = document.getElementById('progress');
 const progressFillEl = document.getElementById('progressFill');
-const memoryEl = document.getElementById('memoryMb');
+const memoryEl = document.getElementById('memoryGb');
 const closeLauncherOnStartEl = document.getElementById('closeLauncherOnStart');
 const includeSnapshotsEl = document.getElementById('includeSnapshots');
 const profileSelectEl = document.getElementById('profileSelect');
@@ -47,7 +47,6 @@ const authorGithubLinkEl = document.getElementById('authorGithubLink');
 
 let microsoftConnected = false;
 let microsoftSessionRestoring = false;
-const RAM_STORAGE_KEY = 'launcher.memoryMb';
 const CLOSE_LAUNCHER_STORAGE_KEY = 'launcher.closeOnStart';
 const VERSION_STORAGE_KEY = 'launcher.gameVersion';
 const SNAPSHOTS_STORAGE_KEY = 'launcher.includeSnapshots';
@@ -281,6 +280,8 @@ const getActiveProfile = () => {
   return knownProfiles.find((entry) => entry && entry.id === selectedId) || null;
 };
 
+const getSelectedMemoryMb = () => Math.round(Number(memoryEl.value) * 1024);
+
 const renderProfiles = (profiles, activeId) => {
   knownProfiles = Array.isArray(profiles) ? profiles : [];
   activeProfileId = activeId || null;
@@ -324,6 +325,9 @@ const applyActiveProfileToForm = () => {
   const profile = getActiveProfile();
 
   if (!profile) {
+    if (memoryEl) {
+      memoryEl.value = '4';
+    }
     if (profileNameEl) {
       profileNameEl.value = '';
     }
@@ -342,6 +346,13 @@ const applyActiveProfileToForm = () => {
 
   if (profileNameEl) {
     profileNameEl.value = profile.name || '';
+  }
+
+  if (memoryEl) {
+    const memoryMb = Number.isSafeInteger(profile.memoryMb) && profile.memoryMb >= 1024
+      ? profile.memoryMb
+      : 4096;
+    memoryEl.value = String(memoryMb / 1024);
   }
 
   if (profileGameDirectoryEl) {
@@ -374,6 +385,7 @@ const persistActiveProfile = async ({ showStatus = false } = {}) => {
     gameDirectory: profileGameDirectoryEl ? profileGameDirectoryEl.value : profile.gameDirectory,
     modloader: modloaderEl ? modloaderEl.value : (profile.modloader || 'vanilla'),
     modloaderVersion: modloaderVersionEl ? modloaderVersionEl.value : (profile.modloaderVersion || ''),
+    memoryMb: getSelectedMemoryMb(),
     launchArguments: launchArgumentsEl
       ? normalizeLaunchArguments(launchArgumentsEl.value)
       : normalizeLaunchArguments(profile.launchArguments || '')
@@ -936,6 +948,14 @@ versionEl.addEventListener('change', () => {
   void persistActiveProfile();
 });
 
+memoryEl.addEventListener('change', () => {
+  if (!memoryEl.checkValidity()) {
+    memoryEl.reportValidity();
+    return;
+  }
+  void persistActiveProfile();
+});
+
 if (modloaderEl) {
   modloaderEl.addEventListener('change', () => {
     localStorage.setItem(MODLOADER_STORAGE_KEY, modloaderEl.value || 'vanilla');
@@ -974,7 +994,7 @@ launchForm.addEventListener('submit', async (event) => {
   const payload = {
     version: String(formData.get('version') || ''),
     versionType: availableVersions.find((entry) => entry.id === String(formData.get('version') || ''))?.type || 'release',
-    memoryMb: Number(formData.get('memoryMb') || 2048),
+    memoryMb: Math.round(Number(formData.get('memoryGb') || 4) * 1024),
     closeLauncherOnStart: closeLauncherOnStartEl.checked,
     accountId: msAccountSelectEl.value || null,
     gameDirectory: profileGameDirectoryEl ? profileGameDirectoryEl.value : null,
@@ -983,7 +1003,6 @@ launchForm.addEventListener('submit', async (event) => {
     launchArguments: launchArgumentsEl ? normalizeLaunchArguments(launchArgumentsEl.value) : ''
   };
 
-  localStorage.setItem(RAM_STORAGE_KEY, String(payload.memoryMb));
   localStorage.setItem(CLOSE_LAUNCHER_STORAGE_KEY, payload.closeLauncherOnStart ? '1' : '0');
   localStorage.setItem(VERSION_STORAGE_KEY, payload.version);
   localStorage.setItem(MODLOADER_STORAGE_KEY, payload.modloader || 'vanilla');
@@ -998,6 +1017,7 @@ launchForm.addEventListener('submit', async (event) => {
         version: payload.version,
         modloader: payload.modloader,
         modloaderVersion: payload.modloaderVersion,
+        memoryMb: payload.memoryMb,
         launchArguments: payload.launchArguments
       });
 
@@ -1076,18 +1096,6 @@ const tryRestoreMicrosoftSession = async () => {
   } catch {
   } finally {
     setMicrosoftSessionRestoring(false);
-  }
-};
-
-const restoreRamPreference = () => {
-  const saved = localStorage.getItem(RAM_STORAGE_KEY);
-  if (!saved) {
-    return;
-  }
-
-  const optionExists = Array.from(memoryEl.options).some((opt) => opt.value === saved);
-  if (optionExists) {
-    memoryEl.value = saved;
   }
 };
 
@@ -1289,7 +1297,6 @@ const loadLauncherVersion = async () => {
   launcherVersionEl.textContent = 'v?';
 };
 
-restoreRamPreference();
 restoreCloseLauncherPreference();
 restoreSnapshotPreference();
 restoreModloaderPreference();

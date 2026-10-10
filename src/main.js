@@ -80,6 +80,11 @@ function normalizeLaunchArguments(value) {
   return value.trim().slice(0, 2000);
 }
 
+function normalizeMemoryMb(value, fallback = 4096) {
+  const memoryMb = Number(value);
+  return Number.isSafeInteger(memoryMb) && memoryMb >= 1024 ? memoryMb : fallback;
+}
+
 function parseLaunchArguments(raw) {
   const input = normalizeLaunchArguments(raw);
   if (!input) {
@@ -144,6 +149,7 @@ function createDefaultProfilesStore() {
       version: '',
       modloader: 'vanilla',
       modloaderVersion: '',
+      memoryMb: 4096,
       launchArguments: '',
       gameDirectory: defaultGameDirectory()
     }]
@@ -162,6 +168,7 @@ function normalizeProfilesStore(store) {
         version: typeof entry.version === 'string' ? entry.version.trim() : '',
         modloader: normalizeModloader(entry.modloader),
         modloaderVersion: typeof entry.modloaderVersion === 'string' ? entry.modloaderVersion.trim() : '',
+        memoryMb: normalizeMemoryMb(entry.memoryMb),
         launchArguments: normalizeLaunchArguments(entry.launchArguments),
         gameDirectory: normalizeGameDirectoryPath(entry.gameDirectory) || defaultGameDirectory()
       }))
@@ -230,6 +237,7 @@ function publicProfiles(store) {
     version: entry.version,
     modloader: entry.modloader,
     modloaderVersion: entry.modloaderVersion,
+    memoryMb: entry.memoryMb,
     launchArguments: entry.launchArguments,
     gameDirectory: entry.gameDirectory
   }));
@@ -1480,8 +1488,7 @@ ipcMain.handle('launcher:start', async (_, payload) => {
     return { ok: false, message: 'Connecte ton compte Microsoft avant de lancer.' };
   }
 
-  const safeMemoryMb = Number(memoryMb);
-  const maxMemoryMb = Number.isFinite(safeMemoryMb) && safeMemoryMb >= 1024 ? safeMemoryMb : 2048;
+  const maxMemoryMb = normalizeMemoryMb(memoryMb, 2048);
   const shouldCloseLauncher = Boolean(closeLauncherOnStart);
   const allowedVersionTypes = new Set(['release', 'snapshot', 'old_alpha', 'old_beta']);
   const resolvedVersionType = typeof versionType === 'string' && allowedVersionTypes.has(versionType)
@@ -1889,6 +1896,7 @@ ipcMain.handle('profiles:create', async (_, requestedName) => {
     version: '',
     modloader: 'vanilla',
     modloaderVersion: '',
+    memoryMb: 4096,
     launchArguments: '',
     gameDirectory
   };
@@ -1929,6 +1937,14 @@ ipcMain.handle('profiles:update', async (_, payload) => {
 
   if (typeof payload?.modloaderVersion === 'string') {
     profile.modloaderVersion = payload.modloaderVersion.trim();
+  }
+
+  if (payload?.memoryMb !== undefined) {
+    const memoryMb = Number(payload.memoryMb);
+    if (!Number.isSafeInteger(memoryMb) || memoryMb < 1024) {
+      return profilesResponse(store, false, 'La RAM doit être un nombre entier de Mo supérieur ou égal à 1024.');
+    }
+    profile.memoryMb = memoryMb;
   }
 
   if (typeof payload?.launchArguments === 'string') {

@@ -85,12 +85,8 @@
             </div>
 
             <div>
-              <label for="memoryMb">RAM max</label>
-              <select id="memoryMb" name="memoryMb" required>
-                <option value="4096">4 Go</option>
-                <option value="8192">8 Go</option>
-                <option value="16384">16 Go</option>
-              </select>
+              <label for="memoryGb">RAM max (Go)</label>
+              <input id="memoryGb" name="memoryGb" type="number" min="1" step="0.5" value="4" required />
             </div>
           </div>
 
